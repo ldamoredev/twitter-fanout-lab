@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Build the React panel, package the JVM, run the lab.
+# Usage: ./lab            # installDist + server on :18080
+#        ./lab test       # gradle test (panel included)
+set -euo pipefail
+root="$(cd "$(dirname "$0")" && pwd)"
+cd "$root"
+
+# kotlin-conventions 0.4.2 no resuelve con un JVM < 21, así que el JDK del shell
+# que llama se ignora a propósito.
+java_home="$(/usr/libexec/java_home -v 25 2>/dev/null || true)"
+if [[ -z "$java_home" ]]; then
+  echo "Falta el JDK 25: '/usr/libexec/java_home -v 25' no encuentra nada." >&2
+  exit 1
+fi
+export JAVA_HOME="$java_home"
+export TRANTOR__HTTP_SERVER__PORT="${TRANTOR__HTTP_SERVER__PORT:-18080}"
+
+if [[ "${1:-}" == "test" ]]; then
+  exec ./gradlew test
+fi
+
+./gradlew installDist
+exec ./build/install/twitter-fanout-lab/bin/twitter-fanout-lab

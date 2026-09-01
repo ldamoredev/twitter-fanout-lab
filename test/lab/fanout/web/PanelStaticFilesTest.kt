@@ -15,40 +15,55 @@ class PanelStaticFilesTest {
     @Test
     fun `la portada del panel se sirve en la raiz`() {
         withApp { port ->
-            val response = get(port, "/")
-            assertThat(response.statusCode()).isEqualTo(200)
-            assertThat(response.body()).contains("¿Cómo diseñarías el timeline de Twitter?")
-            assertThat(response.body()).contains("panel.css")
+            val page = loadPage(port, "/")
+            assertThat(page.html).contains("id=\"root\"")
+            assertThat(page.js).contains("¿Cómo diseñarías el timeline de Twitter?")
         }
     }
 
     @Test
     fun `la pagina del modelo trae la calculadora con las constantes de TimelineStorage`() {
         withApp { port ->
-            val response = get(port, "/modelo.html")
-            assertThat(response.statusCode()).isEqualTo(200)
-            assertThat(response.body()).contains("value=\"50000000\"")
-            assertThat(response.body()).contains("value=\"800\"")
-            assertThat(response.body()).contains("value=\"16\"")
-            assertThat(response.body()).contains("value=\"320\"")
-            assertThat(response.body()).contains("publicar un post")
-            assertThat(response.body()).contains("seguir a alguien")
-            assertThat(response.body()).contains("pedir un timeline")
-            assertThat(get(port, "/modelo.js").statusCode()).isEqualTo(200)
+            val page = loadPage(port, "/modelo.html")
+            assertThat(page.js).contains("5e7")
+            assertThat(page.js).contains("800")
+            assertThat(page.js).contains("320")
+            assertThat(page.js).contains("publicar un post")
+            assertThat(page.js).contains("seguir a alguien")
+            assertThat(page.js).contains("pedir un timeline")
         }
     }
 
     @Test
-    fun `el css y el modulo compartido del panel salen del classpath`() {
+    fun `el css del panel sale del classpath junto al bundle`() {
         withApp { port ->
-            val css = get(port, "/panel.css")
-            val js = get(port, "/lib.js")
-            assertThat(css.statusCode()).isEqualTo(200)
-            assertThat(css.body()).contains("--bg")
-            assertThat(js.statusCode()).isEqualTo(200)
-            assertThat(js.body()).contains("export async function call")
-            assertThat(js.body()).contains("S6")
+            val page = loadPage(port, "/")
+            assertThat(page.html).contains("/assets/")
+            assertThat(page.css).contains("--bg")
         }
+    }
+
+    private data class Page(val html: String, val js: String, val css: String)
+
+    private fun loadPage(port: Int, path: String): Page {
+        val htmlResponse = get(port, path)
+        assertThat(htmlResponse.statusCode()).isEqualTo(200)
+        val html = htmlResponse.body()
+        val jsHrefs = ASSET_JS.findAll(html).map { it.groupValues[1] }.distinct().toList()
+        val cssHrefs = STYLESHEET.findAll(html).map { it.groupValues[1] }.distinct().toList()
+        assertThat(jsHrefs).isNotEmpty()
+        assertThat(cssHrefs).isNotEmpty()
+        val js = jsHrefs.joinToString("\n") { href ->
+            val response = get(port, href)
+            assertThat(response.statusCode()).describedAs(href).isEqualTo(200)
+            response.body()
+        }
+        val css = cssHrefs.joinToString("\n") { href ->
+            val response = get(port, href)
+            assertThat(response.statusCode()).describedAs(href).isEqualTo(200)
+            response.body()
+        }
+        return Page(html = html, js = js, css = css)
     }
 
     private fun withApp(body: (Int) -> Unit) {
@@ -73,4 +88,9 @@ class PanelStaticFilesTest {
             HttpRequest.newBuilder(URI.create("http://127.0.0.1:$port$path")).GET().build(),
             HttpResponse.BodyHandlers.ofString(),
         )
+
+    companion object {
+        private val ASSET_JS = Regex("""(?:src|href)="(/assets/[^"]+\.js)"""")
+        private val STYLESHEET = Regex("""<link[^>]+href="([^"]+\.css[^"]*)"""")
+    }
 }

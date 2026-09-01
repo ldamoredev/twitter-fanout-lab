@@ -22,11 +22,12 @@ El `HostedService` que arranca y para es el `HttpServer` de Trantor. In-process,
 Correr:
 
 ```bash
-./gradlew test
-./gradlew installDist
-TRANTOR__HTTP_SERVER__PORT=18080 ./build/install/twitter-fanout-lab/bin/twitter-fanout-lab
+./lab test
+./lab
 curl http://127.0.0.1:18080/health
 ```
+
+`./lab` fija `JAVA_HOME` en el JDK 25 e ignora el del shell: `kotlin-conventions` 0.4.2 ni resuelve con un JVM menor a 21, y el default de macOS suele ser Zulu 17.
 
 Tests S0: **3 passed**.
 
@@ -67,11 +68,11 @@ curl -s -X POST http://127.0.0.1:18080/posts \
 # {"postId":"..."}
 ```
 
-Tests S1: **10 passed** (6 CQBus + 1 cálculo + 3 HTTP). Suite al cierre de S1: **13 passed**.
+Tests S1 (modelo): **10 passed** (6 CQBus + 1 cálculo + 3 HTTP).
 
-## S1.5 — El panel
+### El panel
 
-Aprendizaje: **trantor-web no sirve archivos estáticos**. No hay `staticFiles` en el módulo. La única puerta es `HttpServerSettings.configureJavalin`, el JavalinConfig crudo. El panel vive en `resources/public` y se monta con `Location.CLASSPATH` para que sobreviva a `installDist`. Ver `FRICCION.md`.
+Aprendizaje: **trantor-web no sirve archivos estáticos**. No hay `staticFiles` en el módulo. La única puerta es `HttpServerSettings.configureJavalin`, el JavalinConfig crudo. El panel se escribe en `panel/` (React + TypeScript + Vite) y el build escupe `resources/public`, que se monta con `Location.CLASSPATH` para que sobreviva a `installDist`. Ver `FRICCION.md`.
 
 Dos páginas, nada más:
 
@@ -79,12 +80,15 @@ Dos páginas, nada más:
 - `/modelo.html` — calculadora en vivo (defaults de `TimelineStorage.kt`) y tres botones contra la API real: publicar, seguir, pedir timeline.
 
 ```bash
-./gradlew installDist
-TRANTOR__HTTP_SERVER__PORT=18080 ./build/install/twitter-fanout-lab/bin/twitter-fanout-lab
+./lab
 # http://127.0.0.1:18080/
 ```
 
-Tests S1.5: **3 passed**. Suite: **16 passed**.
+`./lab` corre Vite + `installDist` + el proceso, con el JDK 25 fijo. `./lab test` es `./gradlew test` (incluye `npm test` del panel). Para iterar sólo el UI: el JVM en 18080 y `npm --prefix panel run dev` (proxy a la API).
+
+Tests del panel: **3 HTTP** (JUnit) + **3 vitest** (cálculo). Suite al cierre de S1: **16 JUnit passed**.
+
+S1 cerrado. S2 es el fan-out al publicar.
 
 ## Cómo está armado
 
@@ -94,6 +98,7 @@ Monolito de un solo contexto (el feed). La costura que se puede partir después 
 web/     TwitterFanoutWebModule + controllers     HTTP
 core/    CoreModule                               un composition root
          posts/ follows/ timelines/ health/       packages, no módulos de Trantor
+panel/   React + Vite                             fuente del UI; dist → resources/public
 ```
 
 `main` cuelga el web module. El web registra controllers y, en `compose`, mete `CoreModule`. El core no habla Javalin: en `compose` registra stores, en `initialize` registra todos los handlers del CQBus. `platform/` aparece cuando haya cola o Postgres.

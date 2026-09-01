@@ -31,10 +31,51 @@ application {
     mainClass.set("lab.fanout.MainKt")
 }
 
+val withNode = layout.projectDirectory.file("scripts/with-node.sh").asFile
+
+val panelNpmCi = tasks.register<Exec>("panelNpmCi") {
+    group = "build"
+    workingDir = file("panel")
+    commandLine(withNode, "npm", "ci")
+    inputs.file("panel/package-lock.json")
+    outputs.dir("panel/node_modules")
+}
+
+val panelTest = tasks.register<Exec>("panelTest") {
+    group = "verification"
+    dependsOn(panelNpmCi)
+    workingDir = file("panel")
+    commandLine(withNode, "npm", "test")
+    inputs.dir("panel/src")
+    inputs.files("panel/package.json", "panel/package-lock.json", "panel/vite.config.ts", "panel/tsconfig.json")
+}
+
+val panelBuild = tasks.register<Exec>("panelBuild") {
+    group = "build"
+    dependsOn(panelNpmCi)
+    workingDir = file("panel")
+    commandLine(withNode, "npm", "run", "build")
+    inputs.dir("panel/src")
+    inputs.files(
+        "panel/index.html",
+        "panel/modelo.html",
+        "panel/package.json",
+        "panel/package-lock.json",
+        "panel/vite.config.ts",
+        "panel/tsconfig.json",
+    )
+    outputs.dir("resources/public")
+}
+
+tasks.named("processResources") {
+    dependsOn(panelBuild)
+}
+
 tasks.named<Test>("test") {
     useJUnitPlatform()
     testLogging {
         events("passed", "skipped", "failed")
         showStandardStreams = false
     }
+    dependsOn(panelTest)
 }

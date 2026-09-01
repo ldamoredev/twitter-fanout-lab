@@ -67,9 +67,9 @@ Bitácora de consumidor de Trantor 0.8.1-beta11. Una entrada por cada cosa que h
 - Qué intentaba hacer: abrir el lab en IntelliJ y sincronizar Gradle.
 - Qué esperaba que pasara: que `jvmToolchain(25)` bastara, o que el IDE tomara el JDK 25 que ya está instalado.
 - Qué pasó: `Could not resolve dev.botta:kotlin-conventions:0.4.2` porque `Dependency requires at least JVM runtime version 21. This build uses a Java 17 JVM.` El toolchain sólo aplica al compile; el daemon de Gradle (el JVM de IntelliJ) carga el plugin y sigue en 17. Es el mismo default Zulu 17 del PATH.
-- Cómo lo resolví, o si no lo resolví: Gradle JVM y Project SDK a `corretto-25` (el mismo que Crafty). `.idea/` está en gitignore: hay que setearlo en cada máquina.
-- Cuánto me costó: 5 minutos
-- El caso mínimo que lo reproduce: abrir el proyecto en IntelliJ con Gradle JVM = 17; sync.
+- Cómo lo resolví, o si no lo resolví: Gradle JVM y Project SDK a `corretto-25` (el mismo que Crafty). `.idea/` está en gitignore: hay que setearlo en cada máquina. Lo mismo pasa en la terminal: el `JAVA_HOME` default de macOS es Zulu 17 y el build muere en la fase de configuración. Por eso `./lab` **pisa** `JAVA_HOME` con `/usr/libexec/java_home -v 25` en vez de respetar el del shell.
+- Cuánto me costó: 5 minutos, más 5 la segunda vez (la misma falla desde zsh, con `./lab`).
+- El caso mínimo que lo reproduce: abrir el proyecto en IntelliJ con Gradle JVM = 17; sync. O `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew test` → `Dependency requires at least JVM runtime version 21`.
 
 ## Nested addModule funciona igual que Crafty: compose al registrar, initialize al build
 
@@ -126,6 +126,17 @@ Bitácora de consumidor de Trantor 0.8.1-beta11. Una entrada por cada cosa que h
       }
   }
   ```
-  `Location.CLASSPATH` + `resources/public` es lo que hace que `installDist` siga sirviendo `/` y `/modelo.html`.
+  `Location.CLASSPATH` + `resources/public` (el dist de Vite) es lo que hace que `installDist` siga sirviendo `/` y `/modelo.html`.
 - Cuánto me costó: 14 minutos (confirmar que no hay staticFiles, leer `HttpServer` / `HttpServerSettings`, dar con `ServiceRegistry.configure` para llegar antes de la construcción del server).
 - El caso mínimo que lo reproduce: `rg staticFiles ~/Documents/projects/404/trantor/trantor-web` → 0 hits. `HttpServer.kt` línea del `settings.configureJavalin(javalinConfig)`. Sin ese seteo, `GET /` es 404.
+
+## CLASSPATH no ve panel/: el dist tiene que existir antes de processResources
+
+- Slice: S1
+- Módulo: trantor-web (el mismo escape hatch; el resto es el lab)
+- Qué intentaba hacer: escribir el panel en React+TS+Vite y seguir sirviéndolo desde el mismo proceso que la API.
+- Qué esperaba que pasara: que `configureJavalin` pudiera apuntar a un directorio fuera del jar, o que hubiera un hook de estáticos en desarrollo.
+- Qué pasó: `Location.CLASSPATH` sólo ve lo que Gradle empaquetó. Editar `panel/src` no cambia lo que escucha Javalin hasta que Vite escriba `resources/public` y corra `processResources` / `installDist`. El daemon de Gradle tampoco hereda nvm: sin Node en PATH, `panelBuild` ni arranca.
+- Cómo lo resolví, o si no lo resolví: `panel/` es la fuente. Vite `outDir` = `resources/public` (gitignored). `processResources` depende de `panelBuild`; `panelBuild` corre `scripts/with-node.sh npm run build`. `./lab` hace Vite + `installDist` + el proceso. Para iterar el UI sin reempaquetar: `npm --prefix panel run dev` con proxy a `:18080`.
+- Cuánto me costó: 25 minutos (MPA de Vite, tarea Gradle, PATH de nvm, tests HTTP que ahora leen el bundle en vez del HTML).
+- El caso mínimo que lo reproduce: borrar `resources/public`, `./gradlew test` sin Node en PATH → Exec falla. Con Node, el test `la portada del panel se sirve en la raiz` busca el copy en el JS de `/assets/`, no en el HTML.

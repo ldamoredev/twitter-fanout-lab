@@ -4,3 +4,5 @@ build
 .idea
 *.iml
 out
+panel/node_modules
+resources/public
