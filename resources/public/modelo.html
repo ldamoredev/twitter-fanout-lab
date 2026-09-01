@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>El modelo · twitter-fanout-lab</title>
+    <link rel="stylesheet" href="/panel.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>◧</text></svg>"
+    />
+  </head>
+  <body data-depth="detallado">
+    <header class="top" id="top"></header>
+
+    <main class="page">
+      <div class="lede">
+        <h1>El modelo</h1>
+        <p class="question">El timeline precomputado guarda IDs, no posts.</p>
+        <p>
+          Mover los números de abajo <strong>es</strong> el aprendizaje de S1. Los defaults
+          son las constantes de <code>TimelineStorage.kt</code>: 50.000.000 usuarios, ventana
+          de 800, 16 bytes por ID, 320 por post completo.
+        </p>
+      </div>
+
+      <section class="section" id="calculadora">
+        <h2>Cuánto pesa el timeline</h2>
+        <div class="calc-fields">
+          <label class="field">
+            <span class="field__label">usuarios</span>
+            <input class="field__input" id="users" type="number" min="1" step="1" value="50000000" />
+          </label>
+          <label class="field">
+            <span class="field__label">ventana de posts</span>
+            <input class="field__input" id="window" type="number" min="1" step="1" value="800" />
+          </label>
+          <label class="field">
+            <span class="field__label">bytes por ID</span>
+            <input class="field__input" id="id-bytes" type="number" min="1" step="1" value="16" />
+          </label>
+          <label class="field">
+            <span class="field__label">bytes por post completo</span>
+            <input class="field__input" id="post-bytes" type="number" min="1" step="1" value="320" />
+          </label>
+        </div>
+
+        <div class="versus" style="margin-top: 16px">
+          <div class="side" data-kind="guarded">
+            <div class="side__head">
+              <span class="side__title">sólo IDs</span>
+              <span class="side__sub">lo que guarda el timeline</span>
+            </div>
+            <div class="verdict">
+              <div class="verdict__number" id="bytes-ids">—</div>
+              <div class="verdict__label" id="bytes-ids-raw"></div>
+            </div>
+          </div>
+          <div class="versus__rule" aria-hidden="true"></div>
+          <div class="side" data-kind="naive">
+            <div class="side__head">
+              <span class="side__title">post completo</span>
+              <span class="side__sub">si cada slot llevara el post</span>
+            </div>
+            <div class="verdict">
+              <div class="verdict__number" id="bytes-full">—</div>
+              <div class="verdict__label" id="bytes-full-raw"></div>
+            </div>
+          </div>
+        </div>
+        <p class="run__note" id="calc-ratio" style="text-align: left; margin-top: 10px"></p>
+        <p class="deep" style="max-width: 68ch; color: var(--text-dim); margin-top: 12px">
+          320 bytes es un registro estimado: 16 (<code>PostId</code>) + 16 (<code>UserId</code>)
+          + 280 (<code>MAX_POST_TEXT_CHARS</code>) + 8 (<code>createdAt</code> en millis). El
+          test del slice fija 640&nbsp;GB contra 12,8&nbsp;TB con estos defaults.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Por qué IDs</h2>
+        <div class="lede">
+          <p>
+            El fan-out copia <em>algo</em> al timeline de cada seguidor. Si ese algo es el post
+            entero, 50 millones de home timelines × 800 entradas son 12,8 TB. Si es un UUID de
+            16 bytes, 640 GB. Veinte veces menos. El cuerpo vive una sola vez; hidratarlo es
+            otro slice.
+          </p>
+          <p class="deep">
+            Publicar todavía <strong>no escribe</strong> el timeline de nadie. Los botones de
+            abajo hablan con la API real: un post se guarda y se lee por id, un follow queda
+            registrado, y <code>GET /timelines/{userId}</code> devuelve
+            <code>{"postIds":[]}</code> hasta S2.
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>La API, ahora</h2>
+        <div class="try-row">
+          <div class="try-card">
+            <div class="try-card__head">
+              <span class="side__title">publicar un post</span>
+              <span class="try-card__ms" id="publish-ms"></span>
+            </div>
+            <label class="field">
+              <span class="field__label">authorId</span>
+              <input class="field__input" id="publish-author" type="text" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span class="field__label">text</span>
+              <input class="field__input" id="publish-text" type="text" value="hola lab" />
+            </label>
+            <button class="btn btn--primary" id="publish" type="button">publicar un post</button>
+            <pre class="code" id="publish-out">todavía no se disparó</pre>
+          </div>
+
+          <div class="try-card">
+            <div class="try-card__head">
+              <span class="side__title">seguir a alguien</span>
+              <span class="try-card__ms" id="follow-ms"></span>
+            </div>
+            <label class="field">
+              <span class="field__label">followerId</span>
+              <input class="field__input" id="follow-follower" type="text" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span class="field__label">followeeId</span>
+              <input class="field__input" id="follow-followee" type="text" spellcheck="false" />
+            </label>
+            <button class="btn btn--primary" id="follow" type="button">seguir a alguien</button>
+            <pre class="code" id="follow-out">todavía no se disparó</pre>
+          </div>
+
+          <div class="try-card">
+            <div class="try-card__head">
+              <span class="side__title">pedir un timeline</span>
+              <span class="try-card__ms" id="timeline-ms"></span>
+            </div>
+            <label class="field">
+              <span class="field__label">userId</span>
+              <input class="field__input" id="timeline-user" type="text" spellcheck="false" />
+            </label>
+            <button class="btn btn--primary" id="timeline" type="button">pedir un timeline</button>
+            <pre class="code" id="timeline-out">todavía no se disparó</pre>
+          </div>
+        </div>
+      </section>
+
+      <p class="footnote">
+        Alice está precargada como follower y dueña del timeline; Bob como autor y followee.
+        Seguí a Bob, publicá como Bob, pedí el timeline de Alice: sale vacío. El modelo ya
+        existe; el fan-out no.
+      </p>
+    </main>
+
+    <script type="module" src="/modelo.js"></script>
+  </body>
+</html>
