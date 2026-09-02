@@ -3,7 +3,7 @@ export type NavItem = { href: string; label: string } | { href: null; label: str
 export const NAV: readonly NavItem[] = [
   { href: '/', label: 'portada' },
   { href: '/modelo.html', label: 'modelo' },
-  { href: null, label: 'fan-out' },
+  { href: '/fanout.html', label: 'fan-out' },
   { href: null, label: 'híbrido' },
   { href: null, label: 'lectura' },
   { href: null, label: 'outbox' },

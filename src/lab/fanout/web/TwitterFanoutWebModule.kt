@@ -12,6 +12,7 @@ import io.javalin.http.staticfiles.Location
 import lab.fanout.core.CoreModule
 import lab.fanout.web.controllers.FollowsController
 import lab.fanout.web.controllers.HealthController
+import lab.fanout.web.controllers.MetricsController
 import lab.fanout.web.controllers.PostsController
 import lab.fanout.web.controllers.TimelinesController
 
@@ -31,5 +32,6 @@ class TwitterFanoutWebModule: Module {
         app.addController(PostsController())
         app.addController(FollowsController())
         app.addController(TimelinesController())
+        app.addController(MetricsController())
     }
 }

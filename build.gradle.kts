@@ -59,6 +59,7 @@ val panelBuild = tasks.register<Exec>("panelBuild") {
     inputs.files(
         "panel/index.html",
         "panel/modelo.html",
+        "panel/fanout.html",
         "panel/package.json",
         "panel/package-lock.json",
         "panel/vite.config.ts",
@@ -75,7 +76,8 @@ tasks.named<Test>("test") {
     useJUnitPlatform()
     testLogging {
         events("passed", "skipped", "failed")
-        showStandardStreams = false
+        // `./lab bench` lo prende para ver la medición del fan-out; el resto del tiempo molesta.
+        showStandardStreams = providers.gradleProperty("labVerbose").isPresent
     }
     dependsOn(panelTest)
 }

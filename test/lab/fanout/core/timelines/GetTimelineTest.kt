@@ -4,6 +4,7 @@ import dev.botta.cqbus.CQBus
 import lab.fanout.core.identity.UserId
 import lab.fanout.core.posts.InMemoryPosts
 import lab.fanout.core.posts.PublishPost
+import lab.fanout.doubles.RecordingJobDispatcher
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
@@ -13,7 +14,7 @@ class GetTimelineTest {
         val posts = InMemoryPosts()
         val timelines = InMemoryTimelines()
         val bus = CQBus()
-        bus.registerHandler { PublishPost.Handler(posts) }
+        bus.registerHandler { PublishPost.Handler(posts, RecordingJobDispatcher()) }
         bus.registerHandler { GetTimeline.Handler(timelines) }
         val alice = UserId()
         val bob = UserId()

@@ -8,9 +8,8 @@ export function PortadaPage() {
         <p className="question">¿Cómo diseñarías el timeline de Twitter?</p>
         <p>
           Este laboratorio no es un clon. Existe para responder esa pregunta con un número adelante, y para
-          someter a Trantor a un proyecto que no es Crafty. Hoy está construido el modelo: posts, follows y
-          un timeline de IDs. El fan-out, el híbrido y la hidratación vienen después; no hay botones de lo
-          que todavía no existe.
+          someter a Trantor a un proyecto que no es Crafty. Hoy están construidos el modelo y el fan-out on
+          write. El híbrido y la hidratación vienen después; no hay botones de lo que todavía no existe.
         </p>
       </div>
 
@@ -75,9 +74,9 @@ export function PortadaPage() {
               eventualmente consistente; el del autor no espera al fan-out.»
             </p>
             <p className="deep">
-              En este lab eso se va a apoyar en hidratar IDs desde cache y en <code>defer</code> (S4). Hoy
-              el timeline ni siquiera se escribe al publicar: el modelo guarda IDs, y el cálculo de por qué
-              IDs y no el post entero está en <a href="/modelo.html">modelo</a>.
+              En este lab eso se va a apoyar en hidratar IDs desde cache y en <code>defer</code> (S4). El
+              timeline ya se escribe solo al publicar; lo que devuelve siguen siendo IDs, y el cálculo de
+              por qué IDs y no el post entero está en <a href="/modelo.html">modelo</a>.
             </p>
           </Step>
         </div>
@@ -96,10 +95,32 @@ export function PortadaPage() {
               </p>
               <span className="index__contrast">
                 <span>
-                  el feed todavía <b className="n">no se escribe</b> al publicar
+                  el timeline guarda <b>IDs</b>, no posts
                 </span>
                 <span>
-                  eso es <b>S2</b>
+                  <b className="n">20×</b> menos disco
+                </span>
+              </span>
+            </span>
+            <span className="index__go" aria-hidden="true">
+              →
+            </span>
+          </a>
+
+          <a className="index__item" href="/fanout.html">
+            <span className="index__id">S2</span>
+            <span className="index__body">
+              <h3>Fan-out on write</h3>
+              <p className="index__q">
+                Publicar despacha un job y contesta 201. La cola escribe los timelines de los seguidores,
+                de a 100 por job.
+              </p>
+              <span className="index__contrast">
+                <span>
+                  1.000 seguidores = <b>11 jobs</b>
+                </span>
+                <span>
+                  fan-out completo en <b className="n">14 ms</b>
                 </span>
               </span>
             </span>
@@ -109,8 +130,7 @@ export function PortadaPage() {
           </a>
         </div>
         <p className="run__note" style={{ textAlign: 'left', marginTop: 12 }}>
-          Fan-out, híbrido, lectura, outbox e infra están en la nav, apagados, hasta el slice que los
-          construya.
+          Híbrido, lectura, outbox e infra están en la nav, apagados, hasta el slice que los construya.
         </p>
       </section>
 

@@ -88,17 +88,60 @@ Dos páginas, nada más:
 
 Tests del panel: **3 HTTP** (JUnit) + **3 vitest** (cálculo). Suite al cierre de S1: **16 JUnit passed**.
 
-S1 cerrado. S2 es el fan-out al publicar.
+S1 cerrado.
+
+## S2 — Fan-out on write
+
+Aprendizaje, con el número adelante: un post de alguien con **1.000 seguidores** son **11 jobs** y **1.000 escrituras**. Publicar contestó en **7 ms**; el fan-out completo terminó **14 ms** después de que el cliente ya tenía su 201. El costo de escritura no desaparece — se corre del request a la cola.
+
+```
+publish (request)          POST /posts → 201, despacha 1 job
+  FanoutPost               lee seguidores, corta en tandas de 100 → 10 jobs
+    WriteTimelineChunk×10  prepend del PostId en 100 timelines cada uno
+jobs = 1 + ceil(1000/100) = 11        escrituras = 1000
+```
+
+Los dos niveles son la decisión del slice. Si `PublishPost` leyera la lista de seguidores, publicar costaría O(seguidores) **antes** del 201; si despachara un job por seguidor, serían 1.000 mensajes de cola para 1.000 escrituras de 16 bytes. La tanda es la perilla: `FANOUT_CHUNK_FOLLOWERS = 100`, `FANOUT_WORKERS = 8` en `FanoutTuning.kt`.
+
+Decisión explícita: el fan-out escribe el timeline de los **seguidores**, no el del autor. Twitter mete tus propios posts en tu home timeline; acá no, porque el brief define el trabajo como "el ID en el timeline de cada seguidor" y meter al autor ensucia la cuenta de jobs.
+
+### Qué hace Trantor acá (leído y corrido)
+
+- `JobsModule` (lo registra `ApplicationBuilder` solo) da `JobDispatcher`, `JobQueueRegistry`, `JobHandlerRegistry` y el serializer. El consumidor **no** viene incluido: hay que llamar `services.addJobProcessor(...)`.
+- `JobProcessor` es un `HostedService`. Es el **segundo** del lab, después del `HttpServer`, y ahí el orden de apagado deja de ser trivia: se paran en orden inverso, así que primero muere el HTTP y después drena el worker.
+- La cola es del lab. `MessageQueue` sólo tiene una implementación publicada y es SQS (`trantor-queues-sqs`). `InMemoryMessageQueue` copia su semántica: entrega al menos una vez, visibility timeout, borrado explícito. Ver `FRICCION.md`.
+- Los jobs son `data class ...: Job()` y se serializan con Gson: los `Id` viajan como string por `IdTypeAdapterFactory`, igual que en HTTP.
+- Métricas: no hay. El `HttpServer` tiene `stats`; el `JobProcessor` no tiene nada. Los contadores salen de la cola y se exponen en `GET /metrics/fanout` → `{"jobsEnqueued":11,"jobsProcessed":11,"jobsPending":0}`.
+
+```bash
+./lab
+ALICE=$(uuidgen | tr '[:upper:]' '[:lower:]'); BOB=$(uuidgen | tr '[:upper:]' '[:lower:]')
+curl -s -X POST localhost:18080/follows -H 'content-type: application/json' \
+  -d "{\"followerId\":\"$ALICE\",\"followeeId\":\"$BOB\"}"
+curl -s -X POST localhost:18080/posts -H 'content-type: application/json' \
+  -d "{\"authorId\":\"$BOB\",\"text\":\"S2 escribe timelines\"}"
+curl -s localhost:18080/timelines/$ALICE   # {"postIds":["..."]} sin tocar nada más
+curl -s localhost:18080/metrics/fanout     # {"jobsEnqueued":2,"jobsProcessed":2,"jobsPending":0}
+```
+
+`./lab bench` corre `FanoutThroughputTest` con los streams prendidos y escupe la línea de la medición. El número es el piso: todo en memoria, en la misma JVM, sin red ni Postgres.
+
+Panel: `/fanout.html` cuenta la cadena, calcula jobs contra seguidores y lee `/metrics/fanout` en vivo.
+
+Tests S2: **11** (4 de la cola, 4 de los jobs con dobles, 2 end-to-end con el `JobProcessor` real, 1 del panel). Suite: **27 JUnit + 6 vitest**.
+
+**Sin hacer, a propósito:** una celebridad con 50 millones de seguidores son 500.001 jobs y 50 millones de escrituras por post — el umbral es S3. Los reintentos existen (visibility timeout) pero no hay dead letter ni backoff. El timeline sigue devolviendo ids pelados: hidratar es S4.
 
 ## Cómo está armado
 
 Monolito de un solo contexto (el feed). La costura que se puede partir después es **API vs worker**, no posts vs follows.
 
 ```
-web/     TwitterFanoutWebModule + controllers     HTTP
-core/    CoreModule                               un composition root
-         posts/ follows/ timelines/ health/       packages, no módulos de Trantor
-panel/   React + Vite                             fuente del UI; dist → resources/public
+web/       TwitterFanoutWebModule + controllers   HTTP
+core/      CoreModule                             un composition root
+           posts/ follows/ timelines/ health/     packages, no módulos de Trantor
+platform/  queues/                                adaptadores de Trantor (la cola del lab)
+panel/     React + Vite                           fuente del UI; dist → resources/public
 ```
 
-`main` cuelga el web module. El web registra controllers y, en `compose`, mete `CoreModule`. El core no habla Javalin: en `compose` registra stores, en `initialize` registra todos los handlers del CQBus. `platform/` aparece cuando haya cola o Postgres.
+`main` cuelga el web module. El web registra controllers y, en `compose`, mete `CoreModule`. El core no habla Javalin ni colas: en `compose` registra stores, la cola y el `JobProcessor`; en `initialize`, los handlers del CQBus y los de jobs. `platform/` guarda lo que implementa una interfaz de Trantor: hoy `InMemoryMessageQueue`, mañana Postgres.

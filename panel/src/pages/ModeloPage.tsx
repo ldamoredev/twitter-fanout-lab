@@ -38,9 +38,10 @@ export function ModeloPage() {
             veces menos. El cuerpo vive una sola vez; hidratarlo es otro slice.
           </p>
           <p className="deep">
-            Publicar todavía <strong>no escribe</strong> el timeline de nadie. Los botones de abajo hablan
-            con la API real: un post se guarda y se lee por id, un follow queda registrado, y{' '}
-            <code>GET /timelines/{'{userId}'}</code> devuelve <code>{'{"postIds":[]}'}</code> hasta S2.
+            Quién escribe esos IDs es otra página: desde S2, publicar despacha un job y la cola llena el
+            timeline de cada seguidor. Está en <a href="/fanout.html">fan-out</a>. Acá los botones son los
+            de siempre: un post se guarda y se lee por id, un follow queda registrado, y{' '}
+            <code>GET /timelines/{'{userId}'}</code> devuelve <code>{'{"postIds":[...]}'}</code>.
           </p>
         </div>
       </section>
@@ -93,7 +94,8 @@ export function ModeloPage() {
 
       <p className="footnote">
         Alice está precargada como follower y dueña del timeline; Bob como autor y followee. Seguí a Bob,
-        publicá como Bob, pedí el timeline de Alice: sale vacío. El modelo ya existe; el fan-out no.
+        publicá como Bob, pedí el timeline de Alice: sale el id del post, sin el texto. Los 16 bytes de la
+        cuenta de arriba, en vivo.
       </p>
     </main>
   );

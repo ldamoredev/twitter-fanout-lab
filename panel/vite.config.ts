@@ -14,6 +14,7 @@ export default defineConfig({
       input: {
         index: 'index.html',
         modelo: 'modelo.html',
+        fanout: 'fanout.html',
       },
       output: {
         entryFileNames: 'assets/[name].js',
@@ -27,6 +28,7 @@ export default defineConfig({
       '/posts': 'http://127.0.0.1:18080',
       '/follows': 'http://127.0.0.1:18080',
       '/timelines': 'http://127.0.0.1:18080',
+      '/metrics': 'http://127.0.0.1:18080',
       '/health': 'http://127.0.0.1:18080',
     },
   },

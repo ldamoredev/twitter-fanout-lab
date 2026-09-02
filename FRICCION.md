@@ -140,3 +140,57 @@ Bitácora de consumidor de Trantor 0.8.1-beta11. Una entrada por cada cosa que h
 - Cómo lo resolví, o si no lo resolví: `panel/` es la fuente. Vite `outDir` = `resources/public` (gitignored). `processResources` depende de `panelBuild`; `panelBuild` corre `scripts/with-node.sh npm run build`. `./lab` hace Vite + `installDist` + el proceso. Para iterar el UI sin reempaquetar: `npm --prefix panel run dev` con proxy a `:18080`.
 - Cuánto me costó: 25 minutos (MPA de Vite, tarea Gradle, PATH de nvm, tests HTTP que ahora leen el bundle en vez del HTML).
 - El caso mínimo que lo reproduce: borrar `resources/public`, `./gradlew test` sin Node en PATH → Exec falla. Con Node, el test `la portada del panel se sirve en la raiz` busca el copy en el JS de `/assets/`, no en el HTML.
+
+## La única MessageQueue publicada es SQS: sin AWS, el fan-out no arranca
+
+- Slice: S2
+- Módulo: trantor-core/queues + trantor-queues-sqs
+- Qué intentaba hacer: fan-out on write con `JobDispatcher` + `JobProcessor`, corriendo en un proceso local y en los tests.
+- Qué esperaba que pasara: una implementación in-memory de `MessageQueue` para desarrollo y test, como tienen casi todos los frameworks con colas (aunque sea una marcada "no usar en producción").
+- Qué pasó: `rg ": MessageQueue" --glob '*.kt'` en todo el repo devuelve **un** implementador: `SqsQueue.kt:22`. El resto de los hits son parámetros y tipos de retorno. `settings.gradle.kts` incluye un solo módulo de colas. `JobQueueRegistry.getQueue()` hace `error("There are no registered queues")` si no registrás ninguna, así que sin AWS (o LocalStack) no hay jobs. `JobsModule` tampoco registra el consumidor: da dispatcher, registry y serializer, y el `JobProcessor` lo tenés que colgar vos con `addJobProcessor()`.
+- Cómo lo resolví, o si no lo resolví: escribí `platform/queues/InMemoryMessageQueue.kt` (60 líneas, `DelayQueue` + mapa de in-flight) copiando la semántica de SQS: entrega al menos una vez, visibility timeout, borrado explícito, `delaySeconds`. Se registra con `services.configure<JobQueueRegistry> { it.addQueue("fanout", queue) }`, que es el mismo camino que usa `addSqsQueue()`.
+- Cuánto me costó: 35 minutos (leer el sistema de jobs entero, escribir la cola con sus tests, cablearla).
+- El caso mínimo que lo reproduce:
+  ```kotlin
+  services.addJobProcessor()          // sin addQueue previo
+  app.start()                          // error: There are no registered queues
+  ```
+
+## MessageQueue.poll() tiene que bloquear, y eso no está escrito en ningún lado
+
+- Slice: S2
+- Módulo: trantor-core/queues
+- Qué intentaba hacer: implementar `MessageQueue.poll(): List<ReceivedMessage>` para la cola del lab.
+- Qué esperaba que pasara: que la interfaz dijera si `poll` es blocking o non-blocking. Es la decisión más importante de toda la implementación y la firma no la insinúa.
+- Qué pasó: el poller no duerme nunca entre vueltas:
+  ```kotlin
+  while (running && !Thread.currentThread().isInterrupted) {
+      val messages = queue.poll()
+      if (messages.isEmpty()) continue   // MessageQueueProcessor.runPoller
+  ```
+  Un `poll()` que devuelve vacío en el acto convierte ese `while` en un spin a full core. `SqsQueue` no lo sufre porque hereda el long-poll de SQS (`pollWaitTimeSeconds` default 20), pero eso es una propiedad del driver, no del contrato. Los `sleep` que sí hay están sólo en los `catch` de error.
+- Cómo lo resolví, o si no lo resolví: `InMemoryMessageQueue.poll()` bloquea hasta 200 ms (`DelayQueue.poll(timeout)`) y recién ahí devuelve vacío. Un test lo fija: `poll espera en vez de devolver vacio en el acto`.
+- Cuánto me costó: 10 minutos, todos de lectura. No me lo comí en runtime porque leí `MessageQueueProcessor` antes de escribir la cola; el que no lo lea se come el spin.
+- El caso mínimo que lo reproduce: `MessageQueue` cuyo `poll()` hace `return emptyList()` + `addJobProcessor()` → un core al 100% con la cola vacía.
+
+## El JobProcessor no tiene stats: el HttpServer sí, los jobs no
+
+- Slice: S2
+- Módulo: trantor-core/jobs
+- Qué intentaba hacer: medir el fan-out, que es lo que pide el slice: cuántos jobs se generan y cuánto tarda.
+- Qué esperaba que pasara: algo equivalente a `HttpServer.stats` (`HttpServerStats`, con requests, dispatches y el thread pool). El precedente existe adentro del mismo framework.
+- Qué pasó: cero. No hay contadores en `JobProcessor`, ni en `MessageQueueProcessor`, ni en `DefaultJobDispatcher`. Lo único que queda del paso de un job son dos `logger.info`. (`TaskPool` de `trantor-taskpool` sí tiene `getMetrics()`, pero es otro subsistema.)
+- Cómo lo resolví, o si no lo resolví: los contadores los lleva la cola del lab (`enqueued` / `delivered` / `deleted` / in-flight) y se exponen por `GET /metrics/fanout` con un puerto en el core (`FanoutStatsSource`) y un adaptador en `platform`. Si mañana la cola es SQS de verdad, la métrica se va con ella y hay que sacarla de CloudWatch.
+- Cuánto me costó: 20 minutos (decidir de dónde salen los números y no meter la cola adentro del core).
+- El caso mínimo que lo reproduce: `rg "stats|metrics" trantor-core/src/dev/botta/trantor/core/jobs` → 0 hits, contra `HttpServer.kt` que expone `val stats: HttpServerStats`.
+
+## El JobProcessor loguea el job entero en INFO: un chunk son 100 UUIDs por línea
+
+- Slice: S2
+- Módulo: trantor-core/jobs
+- Qué intentaba hacer: leer el log del fan-out con 1.000 seguidores.
+- Qué esperaba que pasara: una línea por job con el tipo y el id del job.
+- Qué pasó: `logger.info("Executing job $job")` y otra igual al terminar. El `toString()` que se usa es el de la data class, así que `WriteTimelineChunk` escupió sus 100 `UserId` **dos veces por job**: 20 líneas de miles de caracteres para un fan-out de 14 ms.
+- Cómo lo resolví, o si no lo resolví: `override fun toString()` en el job, que imprime `followers=100` en vez de la lista. `Job` ya trae un `toString()` propio (`describe("id=...", "createdAt=...")`), pero una data class lo pisa sin avisar — el default útil se pierde justo en los jobs que llevan payload grande.
+- Cuánto me costó: 5 minutos.
+- El caso mínimo que lo reproduce: `data class WriteTimelineChunk(val followerIds: List<UserId>): Job()` + `addJobProcessor()` → dos líneas INFO con la lista completa por cada job.

@@ -2,6 +2,7 @@
 # Build the React panel, package the JVM, run the lab.
 # Usage: ./lab            # installDist + server on :18080
 #        ./lab test       # gradle test (panel included)
+#        ./lab bench      # mide el fan-out de S2 y muestra el número
 set -euo pipefail
 root="$(cd "$(dirname "$0")" && pwd)"
 cd "$root"
@@ -18,6 +19,10 @@ export TRANTOR__HTTP_SERVER__PORT="${TRANTOR__HTTP_SERVER__PORT:-18080}"
 
 if [[ "${1:-}" == "test" ]]; then
   exec ./gradlew test
+fi
+
+if [[ "${1:-}" == "bench" ]]; then
+  exec ./gradlew cleanTest test --tests '*FanoutThroughputTest*' -PlabVerbose
 fi
 
 ./gradlew installDist

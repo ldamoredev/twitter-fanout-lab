@@ -35,6 +35,17 @@ class PanelStaticFilesTest {
     }
 
     @Test
+    fun `la pagina del fan-out cuenta la cadena de jobs y las constantes de FanoutTuning`() {
+        withApp { port ->
+            val page = loadPage(port, "/fanout.html")
+            assertThat(page.js).contains("FanoutPost")
+            assertThat(page.js).contains("WriteTimelineChunk")
+            assertThat(page.js).contains("100") // FANOUT_CHUNK_FOLLOWERS
+            assertThat(page.js).contains("/metrics/fanout")
+        }
+    }
+
+    @Test
     fun `el css del panel sale del classpath junto al bundle`() {
         withApp { port ->
             val page = loadPage(port, "/")

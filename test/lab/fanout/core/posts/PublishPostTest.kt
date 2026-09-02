@@ -3,6 +3,7 @@ package lab.fanout.core.posts
 import dev.botta.cqbus.CQBus
 import dev.botta.trantor.domain.errors.ArgumentCannotBeEmptyError
 import lab.fanout.core.identity.UserId
+import lab.fanout.doubles.RecordingJobDispatcher
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -12,7 +13,7 @@ class PublishPostTest {
     fun `un post publicado se guarda y se lee por id`() {
         val posts = InMemoryPosts()
         val bus = CQBus()
-        bus.registerHandler { PublishPost.Handler(posts) }
+        bus.registerHandler { PublishPost.Handler(posts, RecordingJobDispatcher()) }
         bus.registerHandler { GetPost.Handler(posts) }
         val authorId = UserId()
 
