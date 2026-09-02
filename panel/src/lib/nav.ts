@@ -6,6 +6,6 @@ export const NAV: readonly NavItem[] = [
   { href: '/fanout.html', label: 'fan-out' },
   { href: '/hibrido.html', label: 'híbrido' },
   { href: '/lectura.html', label: 'lectura' },
-  { href: null, label: 'outbox' },
+  { href: '/outbox.html', label: 'outbox' },
   { href: null, label: 'infra' },
 ];

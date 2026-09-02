@@ -104,8 +104,8 @@ export function LecturaPage() {
 
       <p className="footnote">
         Lo que S4 <strong>no</strong> resuelve: si el proceso se cae entre persistir y disparar el
-        evento, el fan-out se pierde. Garantizar que el evento salga con la escritura es el outbox
-        (S5).
+        evento, el fan-out se pierde. Garantizar que el evento salga con la escritura es el outbox:{' '}
+        <a href="/outbox.html">outbox</a>.
       </p>
     </main>
   );

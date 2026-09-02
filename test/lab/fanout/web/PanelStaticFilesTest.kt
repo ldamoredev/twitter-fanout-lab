@@ -69,6 +69,17 @@ class PanelStaticFilesTest {
     }
 
     @Test
+    fun `la pagina del outbox trae los tres experimentos y el job extra`() {
+        withApp { port ->
+            val page = loadPage(port, "/outbox.html")
+            assertThat(page.js).contains("ProcessEventHandlerJob")
+            assertThat(page.js).contains("afterCommit")
+            assertThat(page.js).contains("deduplicationId")
+            assertThat(page.js).contains("invokeEventHandler")
+        }
+    }
+
+    @Test
     fun `el css del panel sale del classpath junto al bundle`() {
         withApp { port ->
             val page = loadPage(port, "/")

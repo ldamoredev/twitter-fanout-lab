@@ -65,7 +65,7 @@ export function FanoutPage() {
         <h2>La medición</h2>
         <div className="derived">
           <Row k="seguidores" v="1.000" />
-          <Row k="jobs generados" v="11 (1 que reparte + 10 tandas)" />
+          <Row k="jobs generados" v="12 (1 outbox + 1 que reparte + 10 tandas)" />
           <Row k="publish respondió en" v="7 ms" />
           <Row k="fan-out completo en" v="14 ms" />
         </div>

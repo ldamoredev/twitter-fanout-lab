@@ -12,6 +12,7 @@ import lab.fanout.core.posts.PublishPost
 import lab.fanout.doubles.RecordingEventDispatcher
 import lab.fanout.doubles.RecordingJobDispatcher
 import lab.fanout.doubles.testPostCache
+import lab.fanout.platform.tx.InMemoryTransactionManager
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
@@ -24,7 +25,7 @@ class FanoutOnWriteTest {
             jobs.dispatch(FanoutPost(event.postId, event.authorId))
         }
         val bus = CQBus()
-        bus.registerHandler { PublishPost.Handler(InMemoryPosts(), testPostCache(), events) }
+        bus.registerHandler { PublishPost.Handler(InMemoryPosts(), testPostCache(), events, InMemoryTransactionManager()) }
         val authorId = UserId()
 
         val published = bus.execute(PublishPost(authorId, "hola lab"))

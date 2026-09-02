@@ -62,6 +62,7 @@ val panelBuild = tasks.register<Exec>("panelBuild") {
         "panel/fanout.html",
         "panel/hibrido.html",
         "panel/lectura.html",
+        "panel/outbox.html",
         "panel/package.json",
         "panel/package-lock.json",
         "panel/vite.config.ts",

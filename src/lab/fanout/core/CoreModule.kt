@@ -7,19 +7,19 @@ import dev.botta.trantor.core.jobs.JobDispatcher
 import dev.botta.trantor.core.jobs.JobQueueRegistry
 import dev.botta.trantor.core.jobs.addJobProcessor
 import dev.botta.trantor.core.jobs.registerHandler
+import dev.botta.trantor.core.tx.TransactionManager
 import dev.botta.trantor.di.ServiceProvider
 import dev.botta.trantor.di.ServiceRegistry
 import dev.botta.trantor.hosting.Module
 import dev.botta.trantor.primitives.events.EventDispatcher
-import dev.botta.trantor.primitives.events.on
 import lab.fanout.core.follows.FollowUser
 import lab.fanout.core.follows.Follows
 import lab.fanout.core.follows.InMemoryFollows
 import lab.fanout.core.health.Ping
+import lab.fanout.core.outbox.FanoutOnPostPublished
 import lab.fanout.core.posts.GetPost
 import lab.fanout.core.posts.InMemoryPosts
 import lab.fanout.core.posts.PostCache
-import lab.fanout.core.posts.PostPublished
 import lab.fanout.core.posts.Posts
 import lab.fanout.core.posts.PublishPost
 import lab.fanout.core.timelines.CelebrityThreshold
@@ -34,9 +34,13 @@ import lab.fanout.core.timelines.Timelines
 import lab.fanout.core.timelines.WriteTimelineChunk
 import lab.fanout.platform.queues.InMemoryMessageQueue
 import lab.fanout.platform.queues.QueueFanoutStats
+import lab.fanout.platform.tx.InMemoryTransactionManager
 
 class CoreModule: Module {
     override fun compose(services: ServiceRegistry, config: ConfigManager) {
+        // lastOrNull gana: pisa el NullTransactionManager de TransactionsModule. Sin esto,
+        // afterCommit nunca espera — activeTransaction es siempre null.
+        services.addSingleton<TransactionManager, InMemoryTransactionManager>()
         services.addSingleton<Posts, InMemoryPosts>()
         services.addSingleton<Follows, InMemoryFollows>()
         services.addSingleton<Timelines, InMemoryTimelines>()
@@ -68,10 +72,8 @@ class CoreModule: Module {
         jobs.registerHandler(services.create<FanoutPost.Handler>())
         jobs.registerHandler(services.create<WriteTimelineChunk.Handler>())
 
-        // El fan-out sale del evento, no del command: así `defer` puede atrasarlo hasta que
-        // el post esté persistido y cacheado. `jobs.dispatch` adentro de `defer` no se atrasa.
-        services.get<EventDispatcher>().on<PostPublished> { event ->
-            jobs.dispatch(FanoutPost(event.postId, event.authorId))
-        }
+        // Clase con nombre + queued: el efecto viaja como ProcessEventHandlerJob y sólo
+        // se encola en el commit. Un `on { }` anónimo no tiene handlerType.
+        services.get<EventDispatcher>().subscribe(services.create<FanoutOnPostPublished>())
     }
 }

@@ -12,6 +12,7 @@ import lab.fanout.core.posts.Posts
 import lab.fanout.core.posts.PublishPost
 import lab.fanout.doubles.RecordingEventDispatcher
 import lab.fanout.doubles.testPostCache
+import lab.fanout.platform.tx.InMemoryTransactionManager
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
@@ -104,7 +105,7 @@ class HydratedTimelineTest {
 
     private fun publicar(authorId: UserId, text: String): PostId {
         val bus = CQBus()
-        bus.registerHandler { PublishPost.Handler(posts, cache, events) }
+        bus.registerHandler { PublishPost.Handler(posts, cache, events, InMemoryTransactionManager()) }
         return bus.execute(PublishPost(authorId, text)).postId
     }
 

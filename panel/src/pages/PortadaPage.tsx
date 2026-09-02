@@ -9,8 +9,8 @@ export function PortadaPage() {
         <p>
           Este laboratorio no es un clon. Existe para responder esa pregunta con un número adelante, y para
           someter a Trantor a un proyecto que no es Crafty. Hoy están construidos el modelo, el fan-out on
-          write y el híbrido con su umbral. La hidratación y el outbox vienen después; no hay botones de lo
-          que todavía no existe.
+          write, el híbrido, la hidratación y el outbox. Infra viene después; no hay botones de lo que
+          todavía no existe.
         </p>
       </div>
 
@@ -175,9 +175,31 @@ export function PortadaPage() {
               →
             </span>
           </a>
+
+          <a className="index__item" href="/outbox.html">
+            <span className="index__id">S5</span>
+            <span className="index__body">
+              <h3>Outbox</h3>
+              <p className="index__q">
+                El fan-out se encola en el commit. Un rollback no dispara nada. Un handler encolado
+                que tira no reintenta.
+              </p>
+              <span className="index__contrast">
+                <span>
+                  afterCommit <b>sí</b> espera
+                </span>
+                <span>
+                  retry del handler <b className="n">no</b>
+                </span>
+              </span>
+            </span>
+            <span className="index__go" aria-hidden="true">
+              →
+            </span>
+          </a>
         </div>
         <p className="run__note" style={{ textAlign: 'left', marginTop: 12 }}>
-          Outbox e infra están en la nav, apagados, hasta el slice que los construya.
+          Infra está en la nav, apagada, hasta S6.
         </p>
       </section>
 

@@ -217,6 +217,45 @@ Tests S4: **10** (6 de hidratación con dobles, 2 de `defer`, 1 HTTP del autor, 
 
 **Sin hacer, a propósito:** si el proceso se cae entre persistir y disparar el evento, el fan-out se pierde. Eso es el outbox (S5). El cache no se invalida: los posts no se editan. Y `Identity` del CQBus sigue sin usarse — el “autor” es el `userId` del timeline, no un caller autenticado.
 
+**Después de S5, no ahora:** Rabbit (o SQS/LocalStack). El brief no lo pide; S2 eligió memoria y S6 dice “la cola que hayas elegido”. K4 es el único experimento donde una cola compartida entre pods cambia el dato. Se evalúa cuando cierre el outbox.
+
+## S5 — El outbox transaccional
+
+Aprendizaje: **`afterCommit` sí espera al commit; el retry del handler encolado no existe.** Tres experimentos, no una feature.
+
+```
+publish   transactional { defer { publish(PostPublished); persist; cache } }
+          al commitear se encola ProcessEventHandlerJob
+          el worker corre FanoutOnPostPublished → FanoutPost
+rollback  afterCommit no corre → la cola no ve nada
+```
+
+1. **Rollback.** Publicar el evento y revertir la tx no encola el handler. El commit sí: un `ProcessEventHandlerJob`, todavía sin `FanoutPost`.
+2. **Dedup.** El mismo `deduplicationId` se procesa dos veces. `EnqueueOptions` lo acepta; `QueuedEventConfig` no lo expone; `InMemoryMessageQueue` lo ignora.
+3. **Retry — el importante.** Un `QueuedEventHandler` que tira: `invokeEventHandler` traga el `Throwable`, el job “está bien”, el mensaje se borra, no hay retry. Un `Job` común que tira: `executeJob` propaga, el mensaje no se borra, el visibility timeout lo reentrega.
+
+Un post con 1.000 seguidores pasa de 11 a **12 jobs**. El extra no escribe timelines: recorre el handler encolado.
+
+### Qué hace Trantor acá (leído y corrido)
+
+- `EventHandler.afterCommit` default es `true`. Con `NullTransactionManager` no importa: `activeTransaction` es siempre `null` y `NullTransaction.afterCommit` es un no-op. El único TM “de verdad” vive en `trantor-data` (JDBC). El lab registra `InMemoryTransactionManager` después, y `ServiceProvider.get` usa `lastOrNull`.
+- `queued` serializa el evento y despacha `ProcessEventHandlerJob`. El handler tiene que ser una clase con nombre: un `on { }` anónimo no tiene `handlerType`.
+- `QueuedEventConfig` es sólo `queueName` + `delaySeconds`. No hay `deduplicationId` en el camino del outbox.
+- `DefaultEventDispatcher.invokeEventHandler` catch-all + log. `JobProcessor.executeJob` no catch-ea. `MessageQueueProcessor` borra el mensaje si `onMessage` retorna. Esa asimetría es el dato del slice. Ver `FRICCION.md`.
+
+```bash
+./lab
+# /outbox.html — los tres experimentos y la demo
+curl -s localhost:18080/metrics/fanout
+# sin seguidores: 2 jobs (outbox + FanoutPost que no despacha)
+```
+
+Panel: `/outbox.html` pone los tres experimentos uno al lado del otro y muestra que cada publish suma un job extra.
+
+Tests S5: **8** (3 del TM + 4 experimentos + 1 del panel) más los conteos HTTP que ahora incluyen el outbox. Suite: **54 JUnit + 19 vitest**.
+
+**Sin hacer, a propósito:** `InMemoryPosts` no participa de la tx — un rollback no destablece el post. La cola sigue en el proceso: tres pods no la comparten. Rabbit se anota para después de este slice, cuando K4 pregunte si el mismo job corre dos veces.
+
 ## Cómo está armado
 
 Monolito de un solo contexto (el feed). La costura que se puede partir después es **API vs worker**, no posts vs follows.
@@ -224,9 +263,10 @@ Monolito de un solo contexto (el feed). La costura que se puede partir después 
 ```
 web/       TwitterFanoutWebModule + controllers   HTTP
 core/      CoreModule                             un composition root
-           posts/ follows/ timelines/ health/     packages, no módulos de Trantor
-platform/  queues/                                adaptadores de Trantor (la cola del lab)
+           posts/ follows/ timelines/ outbox/     packages, no módulos de Trantor
+           health/
+platform/  queues/ tx/                            adaptadores de Trantor (cola y tx del lab)
 panel/     React + Vite                           fuente del UI; dist → resources/public
 ```
 
-`main` cuelga el web module. El web registra controllers y, en `compose`, mete `CoreModule`. El core no habla Javalin ni colas: en `compose` registra stores, la cola y el `JobProcessor`; en `initialize`, los handlers del CQBus y los de jobs. `platform/` guarda lo que implementa una interfaz de Trantor: hoy `InMemoryMessageQueue`, mañana Postgres.
+`main` cuelga el web module. El web registra controllers y, en `compose`, mete `CoreModule`. El core no habla Javalin ni colas: en `compose` registra stores, la cola, el TM y el `JobProcessor`; en `initialize`, los handlers del CQBus, los de jobs y el del outbox. `platform/` guarda lo que implementa una interfaz de Trantor: hoy la cola y la tx, mañana Postgres.

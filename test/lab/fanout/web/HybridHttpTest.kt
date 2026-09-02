@@ -34,8 +34,8 @@ class HybridHttpTest {
             val deCelebridad = publish(port, celebridad, "post sin fan-out")
 
             val queue = app.services.get<InMemoryMessageQueue>()
-            // 2 jobs del normal (reparto + un chunk) y 1 de la celebridad (reparto que no despacha).
-            await("la cola drenó") { queue.metrics().deleted == 3L && queue.metrics().pending == 0 }
+            // Normal: outbox + FanoutPost + chunk. Celebridad: outbox + FanoutPost (sin chunk).
+            await("la cola drenó") { queue.metrics().deleted == 5L && queue.metrics().pending == 0 }
 
             val feed = get(port, "/timelines/$lector")
             assertThat(feed.statusCode()).isEqualTo(200)
@@ -56,7 +56,7 @@ class HybridHttpTest {
 
             val queue = app.services.get<InMemoryMessageQueue>()
             await("la cola drenó") { queue.metrics().pending == 0 }
-            assertThat(queue.metrics().enqueued).isEqualTo(1L) // sólo el FanoutPost, ningún chunk
+            assertThat(queue.metrics().enqueued).isEqualTo(2L) // outbox + FanoutPost, ningún chunk
         }
     }
 

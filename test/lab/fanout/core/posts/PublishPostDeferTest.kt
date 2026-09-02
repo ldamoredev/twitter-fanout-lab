@@ -7,6 +7,7 @@ import lab.fanout.core.timelines.FanoutPost
 import lab.fanout.doubles.RecordingEventDispatcher
 import lab.fanout.doubles.RecordingJobDispatcher
 import lab.fanout.doubles.testPostCache
+import lab.fanout.platform.tx.InMemoryTransactionManager
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
@@ -24,7 +25,7 @@ class PublishPostDeferTest {
             jobs.dispatch(FanoutPost(event.postId, event.authorId))
         }
         val bus = CQBus()
-        bus.registerHandler { PublishPost.Handler(posts, cache, events) }
+        bus.registerHandler { PublishPost.Handler(posts, cache, events, InMemoryTransactionManager()) }
 
         val published = bus.execute(PublishPost(UserId(), "despues del defer"))
 
@@ -43,7 +44,7 @@ class PublishPostDeferTest {
             elHandlerVioElPost = posts.get(event.postId).text == "ordenado por defer"
         }
         val bus = CQBus()
-        bus.registerHandler { PublishPost.Handler(posts, cache, events) }
+        bus.registerHandler { PublishPost.Handler(posts, cache, events, InMemoryTransactionManager()) }
 
         bus.execute(PublishPost(UserId(), "ordenado por defer"))
 

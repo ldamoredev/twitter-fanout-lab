@@ -26,15 +26,15 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 /** El número que pide el slice: cuánto tarda el fan-out de un post con 1.000 seguidores. */
 private const val FOLLOWERS = 1_000
 
-/** 1 job que reparte + 1 por cada tanda de seguidores. */
-private const val EXPECTED_JOBS = 1L + FOLLOWERS / FANOUT_CHUNK_FOLLOWERS
+/** Outbox + 1 job que reparte + 1 por cada tanda de seguidores. */
+private const val EXPECTED_JOBS = 2L + FOLLOWERS / FANOUT_CHUNK_FOLLOWERS
 
 /** Techo de cordura, no la medición: en el proceso el fan-out tarda decenas de milisegundos. */
 private const val FANOUT_BUDGET_MILLIS = 5_000L
 
 class FanoutThroughputTest {
     @Test
-    fun `un post con mil seguidores se reparte en once jobs y llega a todos los timelines`() {
+    fun `un post con mil seguidores se reparte en doce jobs y llega a todos los timelines`() {
         withApp { port, app ->
             val authorId = UserId()
             val followerIds = (1..FOLLOWERS).map { UserId() }

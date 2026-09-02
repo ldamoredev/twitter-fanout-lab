@@ -272,3 +272,75 @@ Bitácora de consumidor de Trantor 0.8.1-beta11. Una entrada por cada cosa que h
 - Cómo lo resolví, o si no lo resolví: `PostCache` pisa a 1 hora / 10.000. No es configurable por env: el slice no lo pedía y `@ConfigValue` no convierte `Duration`.
 - Cuánto me costó: 6 minutos.
 - El caso mínimo que lo reproduce: `InMemoryCacheSettings()` sin argumentos + dejar el proceso 61 s + `GetTimeline` → loader pega al store otra vez.
+
+## NullTransactionManager: afterCommit nunca espera
+
+- Slice: S5
+- Módulo: trantor-core/tx
+- Qué intentaba hacer: que un event handler con `afterCommit = true` no corriera si la tx revertía.
+- Qué esperaba que pasara: `transactional { events.publish(...) }` atrasara el handler hasta el commit, o no lo corriera en el rollback.
+- Qué pasó: `TransactionsModule` registra `NullTransactionManager` con `addSingletonIfMissing`. `activeTransaction` es siempre `null`, aunque llames `beginTransaction()` — eso devuelve un `NullTransaction` suelto, no lo guarda. `NullTransaction.afterCommit` es un no-op. `DefaultEventDispatcher.dispatchToHandler` ve tx activa null y corre el handler al toque. El único TM que implementa afterCommit de verdad está en `trantor-data` (`JdbcTransactionManager`), detrás de un DataSource.
+- Cómo lo resolví, o si no lo resolví: `InMemoryTransactionManager` con ThreadLocal, registrado con `addSingleton` para que `lastOrNull` gane. Sin eso el outbox es teatro.
+- Cuánto me costó: 12 minutos (leer Null vs JDBC, confirmar `get` = lastOrNull, escribir el TM del lab).
+- El caso mínimo que lo reproduce:
+  ```kotlin
+  val tm = NullTransactionManager()
+  tm.transactional { tm.activeTransaction } // null
+  tm.beginTransaction().afterCommit { error("nunca corre") }
+  ```
+
+## JdbcTransaction no drena afterCommit anidados
+
+- Slice: S5
+- Módulo: trantor-data/jdbc
+- Qué intentaba hacer: que el `ProcessEventHandlerJob` se encolara en el commit del publish.
+- Qué esperaba que pasara: el afterCommit del event handler corre, `DefaultJobDispatcher.dispatch` encola, listo.
+- Qué pasó: `jobs.afterCommit` default es `true`. Durante el afterCommit del evento la tx **sigue activa** (`setClosed` está en el `finally`). El dispatcher registra *otro* afterCommit para el push. `JdbcTransaction.commit` itera con `forEach`: el callback nuevo no corre, o tira CME. El job del outbox se pierde.
+- Cómo lo resolví, o si no lo resolví: `InMemoryTransaction.drain` recorre por índice y sigue si la lista crece. No toqué JDBC.
+- Cuánto me costó: 8 minutos (leer `DefaultJobDispatcher.dispatch` + `JdbcTransaction.commit`, escribir el test `un afterCommit que registra otro afterCommit tambien corre`).
+- El caso mínimo que lo reproduce:
+  ```kotlin
+  // con JdbcTransaction, adentro de commit():
+  afterCommit { jobDispatcher.dispatch(ProcessEventHandlerJob(...)) }
+  // dispatch ve tx activa → afterCommit { enqueue } → forEach no lo ve
+  ```
+
+## QueuedEventConfig no tiene deduplicationId
+
+- Slice: S5
+- Módulo: trantor-primitives/events
+- Qué intentaba hacer: el experimento 2 del brief — el mismo `deduplicationId` dos veces, una sola vez procesado.
+- Qué esperaba que pasara: poder poner el id en el `QueuedEventHandler`, o que `invokeOrQueueEventHandler` lo pasara en `EnqueueOptions`.
+- Qué pasó: `QueuedEventConfig` es `queueName` + `delaySeconds`. `DefaultEventDispatcher` despacha `EnqueueOptions(delaySeconds = queued.delaySeconds)` y nada más. `EnqueueOptions.deduplicationId` existe para jobs a mano; el camino del outbox no puede expresarlo. Encima `InMemoryMessageQueue.enqueue` ignora `deduplicationId` y `groupId`.
+- Cómo lo resolví, o si no lo resolví: no lo resolví. El test documenta que se procesa dos veces. Es el dato, no un bug a parchear en el lab.
+- Cuánto me costó: 5 minutos.
+- El caso mínimo que lo reproduce: `QueuedEventConfig::class.memberProperties.map { it.name }` → no contiene `deduplicationId`. Encolar dos `Message` con el mismo `EnqueueOptions(deduplicationId = "x")` → `poll()` trae 2.
+
+## invokeEventHandler traga el error: el outbox no reintenta
+
+- Slice: S5
+- Módulo: trantor-core/events + jobs
+- Qué intentaba hacer: el experimento 3 — un handler encolado que tira, ¿hay retry?
+- Qué esperaba que pasara: el mismo camino que un `Job` que tira: `executeJob` propaga, `MessageQueueProcessor` no borra, visibility timeout reentrega.
+- Qué pasó: `ProcessEventHandlerJob.Handler.execute` llama `processQueuedEventHandlerJob` → `invokeEventHandler`, que hace `catch (e: Throwable) { logger.error(...) }`. El job “está bien”. `processMessage` borra. No hay retry. Un `Job` común en el mismo `JobProcessor` sí reintenta, porque `executeJob` no catch-ea.
+- Cómo lo resolví, o si no lo resolví: no lo resolví. El test `un event handler encolado que tira no reintenta, un Job comun si` es el repro. El outbox de Trantor garantiza el *cuándo* se encola, no el retry.
+- Cuánto me costó: 10 minutos (leer `invokeEventHandler` vs `executeJob` vs `processMessage`, armar el `JobProcessor` real con visibility corto).
+- El caso mínimo que lo reproduce:
+  ```kotlin
+  class Exploding: QueuedEventHandler("fanout") {
+      override val eventTypes = listOf(BoomEvent::class)
+      override fun on(event: Event) = error("boom")
+  }
+  // ProcessEventHandlerJob se borra. BoomJob: Job() que tira no se borra.
+  ```
+
+## Un on { } anónimo no puede ser queued
+
+- Slice: S5
+- Módulo: trantor-primitives/events
+- Qué intentaba hacer: cambiar el `events.on<PostPublished> { jobs.dispatch(FanoutPost) }` de S4 a queued sin inventar una clase.
+- Qué esperaba que pasara: `QueuedEventHandler` o un overload de `on` que acepte `queued = true`.
+- Qué pasó: `handlerType` sale de `this::class.simpleName`. Una lambda / objeto anónimo no tiene simpleName: `error("Cannot derive handler type from anonymous class. Use @EventHandlerType.")`. `ProcessEventHandlerJob` guarda ese string para rehidratar el handler. No hay `on(queued = ...)`.
+- Cómo lo resolví, o si no lo resolví: `FanoutOnPostPublished : QueuedEventHandler(FANOUT_QUEUE_NAME)`, clase con nombre, `subscribe`.
+- Cuánto me costó: 4 minutos.
+- El caso mínimo que lo reproduce: `events.on<PostPublished> { }` y marcar el handler como queued — no compila / no hay API. Un objeto anónimo `: QueuedEventHandler()` tira al suscribirse o al derivar el type.

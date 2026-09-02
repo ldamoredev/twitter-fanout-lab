@@ -17,6 +17,7 @@ export default defineConfig({
         fanout: 'fanout.html',
         hibrido: 'hibrido.html',
         lectura: 'lectura.html',
+        outbox: 'outbox.html',
       },
       output: {
         entryFileNames: 'assets/[name].js',

@@ -5,6 +5,7 @@ import dev.botta.trantor.domain.errors.ArgumentCannotBeEmptyError
 import lab.fanout.core.identity.UserId
 import lab.fanout.doubles.RecordingEventDispatcher
 import lab.fanout.doubles.testPostCache
+import lab.fanout.platform.tx.InMemoryTransactionManager
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -15,7 +16,7 @@ class PublishPostTest {
         val posts = InMemoryPosts()
         val cache = testPostCache()
         val bus = CQBus()
-        bus.registerHandler { PublishPost.Handler(posts, cache, RecordingEventDispatcher()) }
+        bus.registerHandler { PublishPost.Handler(posts, cache, RecordingEventDispatcher(), InMemoryTransactionManager()) }
         bus.registerHandler { GetPost.Handler(posts, cache) }
         val authorId = UserId()
 
