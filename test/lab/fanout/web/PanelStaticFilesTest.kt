@@ -46,6 +46,18 @@ class PanelStaticFilesTest {
     }
 
     @Test
+    fun `la pagina del hibrido trae el umbral de celebridad y los dos caminos`() {
+        withApp { port ->
+            val page = loadPage(port, "/hibrido.html")
+            // esbuild pliega el literal a notación científica, igual que el 5e7 del modelo.
+            assertThat(page.js).contains("1e4") // CELEBRITY_THRESHOLD_FOLLOWERS
+            assertThat(page.js).contains("50") // CELEBRITY_MERGE_POSTS
+            assertThat(page.js).contains("UUIDv7")
+            assertThat(page.js).contains("CelebrityThreshold")
+        }
+    }
+
+    @Test
     fun `el css del panel sale del classpath junto al bundle`() {
         withApp { port ->
             val page = loadPage(port, "/")

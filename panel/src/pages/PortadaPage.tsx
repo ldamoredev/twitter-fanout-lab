@@ -8,8 +8,9 @@ export function PortadaPage() {
         <p className="question">¿Cómo diseñarías el timeline de Twitter?</p>
         <p>
           Este laboratorio no es un clon. Existe para responder esa pregunta con un número adelante, y para
-          someter a Trantor a un proyecto que no es Crafty. Hoy están construidos el modelo y el fan-out on
-          write. El híbrido y la hidratación vienen después; no hay botones de lo que todavía no existe.
+          someter a Trantor a un proyecto que no es Crafty. Hoy están construidos el modelo, el fan-out on
+          write y el híbrido con su umbral. La hidratación y el outbox vienen después; no hay botones de lo
+          que todavía no existe.
         </p>
       </div>
 
@@ -61,10 +62,11 @@ export function PortadaPage() {
               lectura.»
             </p>
             <p className="deep">
-              Todavía no lo medimos en este lab: S3 lo va a fijar como constante con la unidad en el nombre,
-              y los tests van a ser 49 fans sí / 51 no. El número no sale de intuición de producto; sale de
-              cuánto cuesta una escritura de timeline contra una lectura mergeada. Hasta no tener ese
-              número, no lo invento en la entrevista: describo <em>cómo lo elegiría</em>.
+              Ya está construido: el umbral son 10.000 seguidores, arriba no se despacha nada y al leer se
+              mergea. Por qué ahí: en el umbral un post cuesta 101 jobs y ~140 ms de propagación, y un
+              millón de seguidores serían 10.001 jobs de un solo post; para el otro lado, cada celebridad
+              que seguís agrega una consulta a todas tus lecturas, así que un umbral bajo devuelve el
+              problema al camino caliente. Está en <a href="/hibrido.html">el híbrido</a>.
             </p>
           </Step>
           <Step n={5} title="Qué se sacrifica: consistencia distinta por camino">
@@ -128,9 +130,31 @@ export function PortadaPage() {
               →
             </span>
           </a>
+
+          <a className="index__item" href="/hibrido.html">
+            <span className="index__id">S3</span>
+            <span className="index__body">
+              <h3>El híbrido</h3>
+              <p className="index__q">
+                Por encima del umbral no hay fan-out: el post se entrega al leer, mergeado con el timeline
+                precomputado.
+              </p>
+              <span className="index__contrast">
+                <span>
+                  umbral: <b>10.000</b> seguidores
+                </span>
+                <span>
+                  arriba, <b className="n">0</b> escrituras al publicar
+                </span>
+              </span>
+            </span>
+            <span className="index__go" aria-hidden="true">
+              →
+            </span>
+          </a>
         </div>
         <p className="run__note" style={{ textAlign: 'left', marginTop: 12 }}>
-          Híbrido, lectura, outbox e infra están en la nav, apagados, hasta el slice que los construya.
+          Lectura, outbox e infra están en la nav, apagados, hasta el slice que los construya.
         </p>
       </section>
 

@@ -15,6 +15,7 @@ export default defineConfig({
         index: 'index.html',
         modelo: 'modelo.html',
         fanout: 'fanout.html',
+        hibrido: 'hibrido.html',
       },
       output: {
         entryFileNames: 'assets/[name].js',

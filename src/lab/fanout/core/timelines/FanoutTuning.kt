@@ -12,3 +12,10 @@ const val FANOUT_WORKERS = 8
 
 /** Única cola del lab, así que también es la default del `JobQueueRegistry`. */
 const val FANOUT_QUEUE_NAME = "fanout"
+
+/**
+ * Cuántos posts se traen de cada celebridad al leer (S3). Es el costo que el híbrido mueve al
+ * camino de lectura: leer cuesta `celebridades seguidas × este número`, y por eso el umbral tiene
+ * que dejar el conjunto de celebridades chico.
+ */
+const val CELEBRITY_MERGE_POSTS = 50

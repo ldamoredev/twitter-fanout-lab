@@ -33,7 +33,7 @@ class FanoutOnWriteTest {
         val jobs = RecordingJobDispatcher()
         val postId = PostId()
 
-        FanoutPost.Handler(follows, jobs).execute(FanoutPost(postId, authorId))
+        FanoutPost.Handler(follows, jobs, CelebrityThreshold()).execute(FanoutPost(postId, authorId))
 
         val chunks = jobs.only<WriteTimelineChunk>()
         assertThat(chunks).hasSize(3) // 250 seguidores / FANOUT_CHUNK_FOLLOWERS
@@ -45,7 +45,7 @@ class FanoutOnWriteTest {
     fun `un autor sin seguidores no genera trabajo`() {
         val jobs = RecordingJobDispatcher()
 
-        FanoutPost.Handler(InMemoryFollows(), jobs).execute(FanoutPost(PostId(), UserId()))
+        FanoutPost.Handler(InMemoryFollows(), jobs, CelebrityThreshold()).execute(FanoutPost(PostId(), UserId()))
 
         assertThat(jobs.dispatched).isEmpty()
     }

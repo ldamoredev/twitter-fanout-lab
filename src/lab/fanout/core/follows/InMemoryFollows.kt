@@ -18,4 +18,6 @@ class InMemoryFollows: Follows {
 
     override fun followersOf(followeeId: UserId): List<UserId> =
         followersByFollowee[followeeId]?.toList() ?: emptyList()
+
+    override fun followersCount(followeeId: UserId): Int = followersByFollowee[followeeId]?.size ?: 0
 }

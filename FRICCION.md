@@ -194,3 +194,38 @@ Bitácora de consumidor de Trantor 0.8.1-beta11. Una entrada por cada cosa que h
 - Cómo lo resolví, o si no lo resolví: `override fun toString()` en el job, que imprime `followers=100` en vez de la lista. `Job` ya trae un `toString()` propio (`describe("id=...", "createdAt=...")`), pero una data class lo pisa sin avisar — el default útil se pierde justo en los jobs que llevan payload grande.
 - Cuánto me costó: 5 minutos.
 - El caso mínimo que lo reproduce: `data class WriteTimelineChunk(val followerIds: List<UserId>): Job()` + `addJobProcessor()` → dos líneas INFO con la lista completa por cada job.
+
+## Configurar algo propio existe, se llama @ConfigValue y no aparece en ningún ejemplo
+
+- Slice: S3
+- Módulo: trantor-di / trantor-config
+- Qué intentaba hacer: que el umbral de celebridad se pudiera mover sin recompilar, como pide el slice.
+- Qué esperaba que pasara: registrar una settings class propia y que el `ConfigManager` la bindeara, que es lo que parece pasar con `HttpServerSettings`.
+- Qué pasó: `HttpServerSettings` no se bindea sola — la registra `trantor-web`. Para un valor propio el único camino es `@ConfigValue("path")` sobre un parámetro del constructor, que resuelve `ConfigServiceValueResolver`. Vive en `trantor-di/src/.../valueresolvers/config/`, no lo menciona ningún ejemplo, y tiene dos comportamientos que sólo se ven leyendo el resolver:
+  - si el parámetro **no** tiene default, usa `config.required(path)` y la app no arranca sin la variable seteada;
+  - `convertLiteral` sólo sabe String/Int/Long/Double/Float/Boolean; cualquier otro tipo tira `IllegalArgumentException` en el `create`, o sea que no podés inyectar un value object.
+
+  El nombre de la variable de entorno tampoco está escrito: sale de `underscoreToCamelCase` en `EnvironmentVariablesConfigProvider`, que parte por `__` y camelCasea cada tramo. `TRANTOR__FANOUT__CELEBRITY_THRESHOLD_FOLLOWERS` termina siendo `fanout.celebrityThresholdFollowers`.
+- Cómo lo resolví, o si no lo resolví: `CelebrityThreshold` es una clase de una sola propiedad `Int` con `@ConfigValue` y default en la constante del dominio, registrada como singleton. Los tests la construyen a mano con 50; el test HTTP la baja por `addMemoryCollection`. Funciona bien: la queja es que descubrirlo cuesta leer dos módulos.
+- Cuánto me costó: 18 minutos (buscar settings propias, encontrar el resolver, deducir el naming de la env var).
+- El caso mínimo que lo reproduce:
+  ```kotlin
+  class CelebrityThreshold(@ConfigValue("fanout.celebrityThresholdFollowers") val followers: Int = 10_000)
+  // sin el default: RequiredConfigError al construir, aunque nadie haya pedido configurarlo
+  // con un value object en vez de Int: IllegalArgumentException desde convertLiteral
+  ```
+
+## Id genera UUIDv7 pero no es Comparable: para ordenar por tiempo hay que desenvolverlo
+
+- Slice: S3
+- Módulo: trantor-domain
+- Qué intentaba hacer: ordenar por fecha un feed que mezcla ids del timeline precomputado con ids traídos al leer, sin hidratar los posts (hidratar es S4).
+- Qué esperaba que pasara: poder ordenar los `PostId` directamente. El default de `Id` es `UuidCreator.getTimeOrderedEpoch()`, o sea UUIDv7: el timestamp está en los 48 bits altos y ordenar ids **es** ordenar por fecha. Es la propiedad más útil que tiene la clase.
+- Qué pasó: `Id` define `equals`, `hashCode`, `toString` y `toUUID`, y nada más. No implementa `Comparable<Id>`, así que ordenar obliga a desenvolver: `sortedByDescending { it.toUUID() }`. Funciona, pero deja al consumidor decidiendo si el orden de los ids significa algo, cuando el framework ya lo garantizó al elegir v7.
+- Cómo lo resolví, o si no lo resolví: desenvolver en el merge de `GetTimeline`, con el porqué escrito arriba del handler. Aparte: dos posts del mismo milisegundo quedan en un orden que nadie garantiza, porque `getTimeOrderedEpoch()` randomiza los bits bajos. Si eso importara, la librería tiene `getTimeOrderedEpochPlus1()` (contador monotónico), pero `Id` no deja elegir sin pisar el default en cada subclase.
+- Cuánto me costó: 8 minutos.
+- El caso mínimo que lo reproduce:
+  ```kotlin
+  listOf(PostId(), PostId()).sorted()          // no compila: Id no es Comparable
+  listOf(PostId(), PostId()).sortedBy { it.toUUID() }  // sí, y queda ordenado por fecha
+  ```

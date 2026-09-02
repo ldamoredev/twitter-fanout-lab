@@ -18,6 +18,7 @@ import lab.fanout.core.posts.GetPost
 import lab.fanout.core.posts.InMemoryPosts
 import lab.fanout.core.posts.Posts
 import lab.fanout.core.posts.PublishPost
+import lab.fanout.core.timelines.CelebrityThreshold
 import lab.fanout.core.timelines.FANOUT_QUEUE_NAME
 import lab.fanout.core.timelines.FANOUT_WORKERS
 import lab.fanout.core.timelines.FanoutPost
@@ -35,6 +36,8 @@ class CoreModule: Module {
         services.addSingleton<Posts, InMemoryPosts>()
         services.addSingleton<Follows, InMemoryFollows>()
         services.addSingleton<Timelines, InMemoryTimelines>()
+        // El umbral se resuelve por DI para que `fanout.celebrityThresholdFollowers` lo pueda mover.
+        services.addSingleton<CelebrityThreshold, CelebrityThreshold>()
 
         // Trantor publica un solo driver de cola y es SQS. La del lab vive en el proceso.
         services.addSingleton(InMemoryMessageQueue(FANOUT_QUEUE_NAME))

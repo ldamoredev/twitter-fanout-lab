@@ -1,6 +1,7 @@
 package lab.fanout.core.timelines
 
 import dev.botta.cqbus.CQBus
+import lab.fanout.core.follows.InMemoryFollows
 import lab.fanout.core.identity.UserId
 import lab.fanout.core.posts.InMemoryPosts
 import lab.fanout.core.posts.PublishPost
@@ -15,7 +16,7 @@ class GetTimelineTest {
         val timelines = InMemoryTimelines()
         val bus = CQBus()
         bus.registerHandler { PublishPost.Handler(posts, RecordingJobDispatcher()) }
-        bus.registerHandler { GetTimeline.Handler(timelines) }
+        bus.registerHandler { GetTimeline.Handler(timelines, InMemoryFollows(), posts, CelebrityThreshold()) }
         val alice = UserId()
         val bob = UserId()
         val published = bus.execute(PublishPost(bob, "este texto no viaja en el timeline"))

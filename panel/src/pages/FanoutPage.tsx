@@ -139,7 +139,8 @@ export function FanoutPage() {
 
       <p className="footnote">
         Lo que S2 <strong>no</strong> resuelve: una celebridad con 50 millones de seguidores son 500.001 jobs
-        y 50 millones de escrituras por post. El umbral es S3.
+        y 50 millones de escrituras por post. Por eso el fan-out dejó de ser incondicional —{' '}
+        <a href="/hibrido.html">el híbrido</a> lo corta en un umbral.
       </p>
     </main>
   );
