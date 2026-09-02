@@ -40,6 +40,8 @@ class HybridHttpTest {
             val feed = get(port, "/timelines/$lector")
             assertThat(feed.statusCode()).isEqualTo(200)
             assertThat(postIdsOf(feed)).containsExactly(deCelebridad, delNormal)
+            assertThat(feed.body()).contains("post sin fan-out")
+            assertThat(feed.body()).contains("post con fan-out")
         }
     }
 
@@ -59,7 +61,9 @@ class HybridHttpTest {
     }
 
     private fun postIdsOf(response: HttpResponse<String>) =
-        JsonParser.parseString(response.body()).asJsonObject["postIds"].asJsonArray.map { it.asString }
+        JsonParser.parseString(response.body()).asJsonObject["posts"].asJsonArray.map {
+            it.asJsonObject["postId"].asString
+        }
 
     private fun publish(port: Int, authorId: UserId, text: String): String {
         val created = post(port, "/posts", """{"authorId":"$authorId","text":"$text"}""")

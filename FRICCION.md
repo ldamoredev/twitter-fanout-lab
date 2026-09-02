@@ -229,3 +229,46 @@ Bitácora de consumidor de Trantor 0.8.1-beta11. Una entrada por cada cosa que h
   listOf(PostId(), PostId()).sorted()          // no compila: Id no es Comparable
   listOf(PostId(), PostId()).sortedBy { it.toUUID() }  // sí, y queda ordenado por fecha
   ```
+
+## CacheModule te da la factory, no un cache
+
+- Slice: S4
+- Módulo: trantor-core/cache
+- Qué intentaba hacer: hidratar `PostId → Post` desde `InMemoryCache` al leer el timeline.
+- Qué esperaba que pasara: inyectar `InMemoryCache<PostId, PostSnapshot>` como cualquier otro singleton, o que `CacheModule` registrara un cache default.
+- Qué pasó: `CacheModule` sólo hace `addSingletonIfMissing<InMemoryCacheFactory, DefaultInMemoryCacheFactory>()`. La factory exige un `TransactionManager` (el default de Trantor alcanza) y `create()` pide settings. No hay un cache “de la app”: cada consumidor construye el suyo. Crafty lo esconde adentro de `JooqOrganizations`; el lab tuvo que inventar `PostCache` para no filtrar Caffeine a los handlers.
+- Cómo lo resolví, o si no lo resolví: `PostCache(factory)` llama `factory.create` con settings propios y se registra como singleton. Los tests usan `DefaultInMemoryCacheFactory(NullTransactionManager())`.
+- Cuánto me costó: 12 minutos (leer `CacheModule`, `InMemoryCache`, Crafty, y entender que no hay bind por tipo).
+- El caso mínimo que lo reproduce:
+  ```kotlin
+  services.get<InMemoryCache<PostId, PostSnapshot>>() // no está registrado
+  services.get<InMemoryCacheFactory>().create<PostId, PostSnapshot>() // sí
+  ```
+
+## defer sólo bufferiza Event.publish, no JobDispatcher.dispatch
+
+- Slice: S4
+- Módulo: trantor-core/events
+- Qué intentaba hacer: que el fan-out no se dispare a mitad de persistir + cachear, usando `EventDispatcher.defer` como pide el slice.
+- Qué esperaba que pasara: `events.defer { posts.add(...); cache.put(...); jobs.dispatch(FanoutPost(...)) }` atrasara el job hasta salir del bloque.
+- Qué pasó: `DefaultEventDispatcher.defer` setea un ThreadLocal y `publish` mira ese flag. `JobDispatcher.dispatch` no sabe nada de defer. Envolver el job en `defer` es un no-op. `NullEventDispatcher.defer` ni bufferiza: corre el bloque y listo, así que un test contra el null dispatcher no prueba el contrato.
+- Cómo lo resolví, o si no lo resolví: `PublishPost` publica `PostPublished` *adentro* de `defer` (el publish va antes de persistir, a propósito) y un `events.on<PostPublished>` despacha el `FanoutPost`. El doble de test (`RecordingEventDispatcher`) copia la semántica del dispatcher real. Ver el test `publicar usa defer para no disparar el fan-out a mitad de la escritura`.
+- Cuánto me costó: 15 minutos (leer `DefaultEventDispatcher.publish` / `defer`, confirmar que jobs no participan, introducir el evento).
+- El caso mínimo que lo reproduce:
+  ```kotlin
+  events.defer {
+      events.publish(PostPublished(...)) // bufferizado
+      jobs.dispatch(FanoutPost(...))     // corre YA
+  }
+  ```
+
+## InMemoryCache default: 1 minuto y 1000 entradas
+
+- Slice: S4
+- Módulo: trantor-core/cache
+- Qué intentaba hacer: cachear snapshots de posts para hidratar el feed.
+- Qué esperaba que pasara: defaults razonables para un proceso de desarrollo, o que el settings documentara por qué 1 minuto / 1000.
+- Qué pasó: `InMemoryCacheSettings` default es `expireAfter = 1.minutes`, `maximumSize = 1000`. Una ventana de timeline son 800 ids; un lab que se deja abierto más de un minuto se come un cache miss en cada hidratación. El comentario de la clase habla de L1/L2 y de no guardar entidades mutables, y no menciona los defaults.
+- Cómo lo resolví, o si no lo resolví: `PostCache` pisa a 1 hora / 10.000. No es configurable por env: el slice no lo pedía y `@ConfigValue` no convierte `Duration`.
+- Cuánto me costó: 6 minutos.
+- El caso mínimo que lo reproduce: `InMemoryCacheSettings()` sin argumentos + dejar el proceso 61 s + `GetTimeline` → loader pega al store otra vez.

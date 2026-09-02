@@ -8,6 +8,7 @@ import lab.fanout.core.posts.InMemoryPosts
 import lab.fanout.core.posts.Post
 import lab.fanout.core.posts.PostId
 import lab.fanout.doubles.RecordingJobDispatcher
+import lab.fanout.doubles.testPostCache
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
@@ -58,9 +59,9 @@ class HybridTimelineTest {
 
         val feed = feedDe(lector)
 
-        assertThat(feed.postIds).hasSize(11)
-        assertThat(feed.postIds).containsAll(deNormales)
-        assertThat(feed.postIds).contains(deCelebridad)
+        assertThat(idsDe(feed)).hasSize(11)
+        assertThat(idsDe(feed)).containsAll(deNormales)
+        assertThat(idsDe(feed)).contains(deCelebridad)
     }
 
     @Test
@@ -76,7 +77,7 @@ class HybridTimelineTest {
 
         val feed = feedDe(lector)
 
-        assertThat(feed.postIds).containsExactly(nuevoCelebridad, nuevoNormal, viejoCelebridad, viejoNormal)
+        assertThat(idsDe(feed)).containsExactly(nuevoCelebridad, nuevoNormal, viejoCelebridad, viejoNormal)
     }
 
     @Test
@@ -87,7 +88,7 @@ class HybridTimelineTest {
         // El post existe pero nadie lo prepende: si apareciera, el lector estaria leyendo por pull.
         publica(normal, "este post no se pullea")
 
-        assertThat(feedDe(lector).postIds).isEmpty()
+        assertThat(idsDe(feedDe(lector))).isEmpty()
     }
 
     @Test
@@ -98,7 +99,7 @@ class HybridTimelineTest {
         // Cruzar el umbral despues de publicar deja el post escrito y ademas pulleable.
         val post = publica(celebridad, "publicado justo en el borde", conFanoutA = lector)
 
-        assertThat(feedDe(lector).postIds).containsExactly(post)
+        assertThat(idsDe(feedDe(lector))).containsExactly(post)
     }
 
     private fun autorCon(seguidores: Int): UserId {
@@ -116,7 +117,9 @@ class HybridTimelineTest {
 
     private fun feedDe(userId: UserId): GetTimeline.Feed {
         val bus = CQBus()
-        bus.registerHandler { GetTimeline.Handler(timelines, follows, posts, umbralDe50) }
+        bus.registerHandler { GetTimeline.Handler(timelines, follows, posts, umbralDe50, testPostCache()) }
         return bus.execute(GetTimeline(userId))
     }
+
+    private fun idsDe(feed: GetTimeline.Feed) = feed.posts.map { it.postId }
 }

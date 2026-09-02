@@ -58,6 +58,17 @@ class PanelStaticFilesTest {
     }
 
     @Test
+    fun `la pagina de lectura trae los dos caminos y defer`() {
+        withApp { port ->
+            val page = loadPage(port, "/lectura.html")
+            assertThat(page.js).contains("PostPublished")
+            assertThat(page.js).contains("defer")
+            assertThat(page.js).contains("InMemoryCache")
+            assertThat(page.js).contains("read-your-writes")
+        }
+    }
+
+    @Test
     fun `el css del panel sale del classpath junto al bundle`() {
         withApp { port ->
             val page = loadPage(port, "/")

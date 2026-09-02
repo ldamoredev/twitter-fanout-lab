@@ -49,22 +49,41 @@ class PostsHttpTest {
     }
 
     @Test
-    fun `el timeline por http expone ids y no el texto del post`() {
+    fun `el timeline por http hidrata el texto del post`() {
         withApp { port, app ->
             val alice = UserId()
             val created = post(
                 port,
                 "/posts",
-                """{"authorId":"${UserId()}","text":"este texto no viaja en el timeline"}""",
+                """{"authorId":"${UserId()}","text":"este texto ahora viaja en el timeline"}""",
             )
             val postId = JsonParser.parseString(created.body()).asJsonObject.get("postId").asString
             app.services.get<Timelines>().prepend(alice, PostId(UUID.fromString(postId)))
 
             val feed = get(port, "/timelines/$alice")
             assertThat(feed.statusCode()).isEqualTo(200)
-            assertThat(feed.body()).contains("\"postIds\"")
+            assertThat(feed.body()).contains("\"posts\"")
             assertThat(feed.body()).contains(postId)
-            assertThat(feed.body()).doesNotContain("este texto no viaja en el timeline")
+            assertThat(feed.body()).contains("este texto ahora viaja en el timeline")
+            assertThat(feed.body()).doesNotContain("\"postIds\"")
+        }
+    }
+
+    @Test
+    fun `el autor lee su post hidratado sin esperar el fan-out`() {
+        withApp { port ->
+            val autor = UserId()
+            val created = post(
+                port,
+                "/posts",
+                """{"authorId":"$autor","text":"lo mio ya"}""",
+            )
+            val postId = JsonParser.parseString(created.body()).asJsonObject.get("postId").asString
+
+            val feed = get(port, "/timelines/$autor")
+            assertThat(feed.statusCode()).isEqualTo(200)
+            assertThat(feed.body()).contains(postId)
+            assertThat(feed.body()).contains("lo mio ya")
         }
     }
 

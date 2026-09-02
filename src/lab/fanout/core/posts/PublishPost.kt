@@ -3,19 +3,26 @@ package lab.fanout.core.posts
 import dev.botta.cqbus.identity.Identity
 import dev.botta.cqbus.requests.Command
 import dev.botta.cqbus.requests.handlers.RequestHandler
-import dev.botta.trantor.core.jobs.JobDispatcher
+import dev.botta.trantor.primitives.events.EventDispatcher
 import lab.fanout.core.identity.UserId
-import lab.fanout.core.timelines.FanoutPost
 
 data class PublishPost(val authorId: UserId, val text: String): Command<PublishPost.Result> {
     data class Result(val postId: PostId)
 
-    internal class Handler(private val posts: Posts, private val jobs: JobDispatcher): RequestHandler<PublishPost, Result> {
+    internal class Handler(
+        private val posts: Posts,
+        private val cache: PostCache,
+        private val events: EventDispatcher,
+    ): RequestHandler<PublishPost, Result> {
         override fun execute(request: PublishPost, identity: Identity): Result {
             val post = Post(authorId = request.authorId, text = request.text)
-            posts.add(post)
-            // El fan-out no pasa por acá: publicar contesta apenas el post está guardado.
-            jobs.dispatch(FanoutPost(post.id, post.authorId))
+            // El publish va primero: sin defer, el handler correría antes de persistir y el
+            // cache estaría frío. `defer` lo bufferiza y dispara al salir del bloque.
+            events.defer {
+                events.publish(PostPublished(post.id, post.authorId))
+                posts.add(post)
+                cache.put(post)
+            }
             return Result(post.id)
         }
     }

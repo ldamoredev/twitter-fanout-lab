@@ -16,6 +16,7 @@ export default defineConfig({
         modelo: 'modelo.html',
         fanout: 'fanout.html',
         hibrido: 'hibrido.html',
+        lectura: 'lectura.html',
       },
       output: {
         entryFileNames: 'assets/[name].js',

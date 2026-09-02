@@ -179,7 +179,43 @@ Panel: `/hibrido.html` explica los dos caminos y calcula, para un número de seg
 
 Tests S3: **10** (7 del híbrido con dobles, 2 end-to-end con el umbral bajado por config, 1 del panel). Suite: **37 JUnit + 11 vitest**.
 
-**Sin hacer, a propósito:** el feed sigue devolviendo ids pelados y sin texto — hidratar, y que el autor vea su propio post antes que el resto, es S4. La ventana de pull por celebridad (`CELEBRITY_MERGE_POSTS = 50`) no pagina. Y un autor que cruza el umbral entre publicar y leer deja el post en los dos lados: el merge lo deduplica, pero nadie limpia lo ya escrito.
+**Sin hacer, a propósito:** el feed seguía devolviendo ids pelados — hidratar, y que el autor vea su propio post antes que el resto, es S4. La ventana de pull por celebridad (`CELEBRITY_MERGE_POSTS = 50`) no pagina. Y un autor que cruza el umbral entre publicar y leer deja el post en los dos lados: el merge lo deduplica, pero nadie limpia lo ya escrito.
+
+## S4 — Hidratación y read-your-writes
+
+Aprendizaje: **el autor y el seguidor no leen el mismo camino**. Publicar cachea el snapshot y contesta 201. El autor mergea sus posts recientes al hidratar: el texto está en el feed cuando el request ya volvió. El seguidor lee el timeline precomputado, que el fan-out llena después. Son dos consistencias, no un bug.
+
+```
+publicar   persistir + cache.put + PostPublished (adentro de defer)
+           al salir del bloque, el evento despacha FanoutPost
+leer autor      precomputado ∪ posts propios ∪ celebridades  → hidratar desde cache
+leer seguidor   precomputado ∪ celebridades                   → hidratar desde cache
+```
+
+`defer` no es async. Bufferiza `EventDispatcher.publish` hasta que el bloque termina, y recién ahí corre los handlers. El publish del evento va *antes* de persistir, a propósito: sin `defer`, el handler vería el store vacío. `jobs.dispatch` adentro de `defer` **no** se atrasa — por eso el fan-out sale del evento y no del command.
+
+### Qué hace Trantor acá (leído y corrido)
+
+- `CacheModule` (lo registra `ApplicationBuilder` solo) da `InMemoryCacheFactory`. No te inyecta un `InMemoryCache<K,V>`: hay que llamar `factory.create(...)` y registrar el servicio. Crafty lo hace adentro del repositorio; acá es `PostCache`.
+- El cache tiene L1 (ThreadLocal, por tx) y L2 (Caffeine). Sin tx activa — el lab usa `NullTransactionManager` — `put` va directo a L2. El comentario del framework es explícito: guardar snapshots, nunca entidades mutables. Ver `FRICCION.md`.
+- Defaults: `expireAfter = 1.minutes`, `maximumSize = 1000`. Un minuto es corto para un lab abierto, y 1000 entradas no cubren una ventana de 800. El lab los pisa a 1 hora / 10.000.
+- `EventDispatcher.defer` sólo mira `publish`. Si el command despachara `FanoutPost` directo, envolverlo en `defer` no cambiaría nada.
+
+```bash
+./lab
+# /lectura.html — los dos caminos, la calculadora de quién ve el post, y la demo
+AUTHOR=$(uuidgen | tr '[:upper:]' '[:lower:]')
+curl -s -X POST localhost:18080/posts -H 'content-type: application/json' \
+  -d "{\"authorId\":\"$AUTHOR\",\"text\":\"lo mio ya\"}"
+curl -s localhost:18080/timelines/$AUTHOR
+# {"posts":[{"postId":"...","authorId":"...","text":"lo mio ya"}]}
+```
+
+Panel: `/lectura.html` explica los dos caminos y calcula, para un elapsed y una latencia de fan-out, quién ya ve el post.
+
+Tests S4: **10** (6 de hidratación con dobles, 2 de `defer`, 1 HTTP del autor, 1 del panel) más el contrato del feed que ahora trae texto. Suite: **46 JUnit + 15 vitest**.
+
+**Sin hacer, a propósito:** si el proceso se cae entre persistir y disparar el evento, el fan-out se pierde. Eso es el outbox (S5). El cache no se invalida: los posts no se editan. Y `Identity` del CQBus sigue sin usarse — el “autor” es el `userId` del timeline, no un caller autenticado.
 
 ## Cómo está armado
 

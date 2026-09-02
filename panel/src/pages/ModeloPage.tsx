@@ -40,8 +40,9 @@ export function ModeloPage() {
           <p className="deep">
             Quién escribe esos IDs es otra página: desde S2, publicar despacha un job y la cola llena el
             timeline de cada seguidor. Está en <a href="/fanout.html">fan-out</a>. Acá los botones son los
-            de siempre: un post se guarda y se lee por id, un follow queda registrado, y{' '}
-            <code>GET /timelines/{'{userId}'}</code> devuelve <code>{'{"postIds":[...]}'}</code>.
+            de siempre: un post se guarda y se lee por id, un follow queda registrado. Desde S4,{' '}
+            <code>GET /timelines/{'{userId}'}</code> hidrata el texto; el cálculo de por qué el
+            precomputado sigue guardando IDs no cambió.
           </p>
         </div>
       </section>
@@ -94,8 +95,8 @@ export function ModeloPage() {
 
       <p className="footnote">
         Alice está precargada como follower y dueña del timeline; Bob como autor y followee. Seguí a Bob,
-        publicá como Bob, pedí el timeline de Alice: sale el id del post, sin el texto. Los 16 bytes de la
-        cuenta de arriba, en vivo.
+        publicá como Bob, pedí el timeline de Alice: el precomputado sigue siendo IDs; desde S4 el GET
+        hidrata el texto. Los 16 bytes de la cuenta de arriba no cambiaron.
       </p>
     </main>
   );

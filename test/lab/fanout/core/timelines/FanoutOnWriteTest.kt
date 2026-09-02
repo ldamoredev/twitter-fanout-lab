@@ -1,13 +1,17 @@
 package lab.fanout.core.timelines
 
 import dev.botta.cqbus.CQBus
+import dev.botta.trantor.primitives.events.on
 import lab.fanout.core.follows.Follow
 import lab.fanout.core.follows.InMemoryFollows
 import lab.fanout.core.identity.UserId
 import lab.fanout.core.posts.InMemoryPosts
 import lab.fanout.core.posts.PostId
+import lab.fanout.core.posts.PostPublished
 import lab.fanout.core.posts.PublishPost
+import lab.fanout.doubles.RecordingEventDispatcher
 import lab.fanout.doubles.RecordingJobDispatcher
+import lab.fanout.doubles.testPostCache
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
@@ -15,8 +19,12 @@ class FanoutOnWriteTest {
     @Test
     fun `publicar un post despacha un solo job, no uno por seguidor`() {
         val jobs = RecordingJobDispatcher()
+        val events = RecordingEventDispatcher()
+        events.on<PostPublished> { event ->
+            jobs.dispatch(FanoutPost(event.postId, event.authorId))
+        }
         val bus = CQBus()
-        bus.registerHandler { PublishPost.Handler(InMemoryPosts(), jobs) }
+        bus.registerHandler { PublishPost.Handler(InMemoryPosts(), testPostCache(), events) }
         val authorId = UserId()
 
         val published = bus.execute(PublishPost(authorId, "hola lab"))

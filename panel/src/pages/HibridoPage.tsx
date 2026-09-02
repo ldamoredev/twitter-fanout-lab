@@ -48,8 +48,9 @@ export function HibridoPage() {
             sus últimos {CELEBRITY_MERGE_POSTS} posts.
           </Step>
           <Step n="3" tag="read">
-            Mergea todo y ordena por <code>PostId</code>. No hidrata: los <code>Id</code> de Trantor son
-            UUIDv7, así que el timestamp está en los bits altos y ordenar ids <em>es</em> ordenar por fecha.
+            Mergea todo y ordena por <code>PostId</code>. Los <code>Id</code> de Trantor son UUIDv7, así
+            que el timestamp está en los bits altos y ordenar ids <em>es</em> ordenar por fecha. Hidratar
+            el texto es el paso siguiente: <a href="/lectura.html">lectura</a>.
           </Step>
         </div>
         <p className="deep">
@@ -121,8 +122,9 @@ export function HibridoPage() {
       </section>
 
       <p className="footnote">
-        Lo que el híbrido <strong>no</strong> resuelve: el timeline sigue devolviendo ids pelados. Hidratar
-        el texto, y que el autor vea su propio post antes que el resto, es S4.
+        Lo que el híbrido <strong>no</strong> resolvía: el timeline devolvía ids pelados. Hidratar el
+        texto, y que el autor vea su propio post antes que el resto, está en{' '}
+        <a href="/lectura.html">lectura</a>.
       </p>
     </main>
   );

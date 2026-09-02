@@ -76,9 +76,10 @@ export function PortadaPage() {
               eventualmente consistente; el del autor no espera al fan-out.»
             </p>
             <p className="deep">
-              En este lab eso se va a apoyar en hidratar IDs desde cache y en <code>defer</code> (S4). El
-              timeline ya se escribe solo al publicar; lo que devuelve siguen siendo IDs, y el cálculo de
-              por qué IDs y no el post entero está en <a href="/modelo.html">modelo</a>.
+              En este lab eso vive en hidratar IDs desde cache y en <code>defer</code>:{' '}
+              <a href="/lectura.html">lectura</a>. El timeline se escribe solo al publicar; el autor
+              hidrata lo suyo sin esperar. El cálculo de por qué IDs y no el post entero está en{' '}
+              <a href="/modelo.html">modelo</a>.
             </p>
           </Step>
         </div>
@@ -152,9 +153,31 @@ export function PortadaPage() {
               →
             </span>
           </a>
+
+          <a className="index__item" href="/lectura.html">
+            <span className="index__id">S4</span>
+            <span className="index__body">
+              <h3>Lectura</h3>
+              <p className="index__q">
+                El feed hidrata el texto desde cache. El autor ve su post al toque; el seguidor espera
+                al fan-out.
+              </p>
+              <span className="index__contrast">
+                <span>
+                  dos caminos, <b>dos consistencias</b>
+                </span>
+                <span>
+                  autor en <b className="n">t=0</b>
+                </span>
+              </span>
+            </span>
+            <span className="index__go" aria-hidden="true">
+              →
+            </span>
+          </a>
         </div>
         <p className="run__note" style={{ textAlign: 'left', marginTop: 12 }}>
-          Lectura, outbox e infra están en la nav, apagados, hasta el slice que los construya.
+          Outbox e infra están en la nav, apagados, hasta el slice que los construya.
         </p>
       </section>
 
